@@ -424,38 +424,6 @@
        return \"{stcdf|movfo} %1, %0\";
   "
   [(set_attr "length" "0,2,4")])
-
-
-(define_expand "truncsihi2"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=g")
-	(subreg:HI 
-	  (match_operand:SI 1 "general_operand" "or")
-          0))]
-  ""
-  "")
-
-
-;;- zero extension instructions
-
-(define_insn "zero_extendqihi2"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(zero_extend:HI (match_operand:QI 1 "general_operand" "0,0")))]
-  ""
-  "bic $0177400, %0"
-  [(set_attr "length" "4,6")])
-			 
-(define_expand "zero_extendhisi2"
-  [(set (subreg:HI 
-          (match_dup 0)
-          2)
-        (match_operand:HI 1 "register_operand" "r"))
-   (set (subreg:HI 
-          (match_operand:SI 0 "register_operand" "=r")
-          0)
-        (const_int 0))]
-  ""
-  "/* operands[1] = make_safe_from (operands[1], operands[0]); */")
-
 
 ;;- sign extension instructions
 

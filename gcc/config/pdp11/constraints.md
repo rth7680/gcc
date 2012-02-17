@@ -57,11 +57,6 @@
   (and (match_code "const_int")
        (match_test "ival == 0")))
 
-(define_constraint "O"
-  "Integer constant for which several individual shifts are better than one big one"
-  (and (match_code "const_int")
-       (match_test "abs (ival) > 1 && abs (ival) <= 4")))
-
 (define_constraint "G"
   "Defines a real zero constant."
   (and (match_code "const_double")

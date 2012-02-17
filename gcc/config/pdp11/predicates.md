@@ -23,17 +23,17 @@
   (ior (match_operand 0 "register_operand")
        (match_test "op == CONST0_RTX (GET_MODE (op))")))
 
-;; Accept integer arguments in the range -4..-2 and 2..4, which are the
-;; shift counts for which we unroll a shift.  This matches the rule for
-;; the "O" constraint.
-(define_predicate "expand_shift_operand"
-  (match_code "const_int")
-{
-  int sh;
+;; Match inline shift counts.
+(define_predicate "const_shifthi_operand"
+  (and (match_code "const_int")
+       (ior (match_test "TARGET_40_PLUS")
+	    (match_test "IN_RANGE (INTVAL (op), -4, 4)"))))
 
-  sh = INTVAL (op);
-  return (abs (sh) > 1 && abs (sh) <= 4);
-})
+(define_predicate "shifthi_operand"
+  (ior (and (match_test "TARGET_40_PLUS")
+	    (match_operand 0 "general_operand"))
+       (and (match_code "const_int")
+	    (match_test "IN_RANGE (INTVAL (op), -4, 4)"))))
 
 ;; Accept anything general_operand accepts, except that registers must
 ;; be FPU registers.

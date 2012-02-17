@@ -26,10 +26,15 @@
     UNSPECV_BLOCKAGE
     UNSPECV_SETD
     UNSPECV_SETI
+    UNSPECV_CLC
     UNSPECV_ADD
     UNSPECV_ADC
     UNSPECV_SUB
     UNSPECV_SBC
+    UNSPECV_ASL
+    UNSPECV_ASR
+    UNSPECV_ROR
+    UNSPECV_ROL
   ])
 
 (define_constants
@@ -767,7 +772,7 @@
 (define_expand "and<mode>3"
   [(set (match_operand:I12 0 "nonimmediate_operand" "")
 	(and:I12 (not:I12 (match_operand:I12 1 "general_operand" ""))
-		    (match_operand:I12 2 "general_operand" "")))]
+		 (match_operand:I12 2 "general_operand" "")))]
   ""
 {
   rtx op1 = operands[1];
@@ -789,13 +794,13 @@
     operands[1] = expand_unop (<MODE>mode, one_cmpl_optab, op1, 0, 1);
 })
 
-(define_insn "*bic<mode>"
+(define_insn "bic<mode>3"
   [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
 	(and:I12
-	  (not:I12 (match_operand:I12 1 "general_operand" "rR,Qi,rR,Qi"))
-	  (match_operand:I12 2 "general_operand" "0,0,0,0")))]
+	  (not:I12 (match_operand:I12 2 "general_operand" "rR,Qi,rR,Qi"))
+	  (match_operand:I12 1 "general_operand" "0,0,0,0")))]
   ""
-  "bic<isfx> %1, %0"
+  "bic<isfx> %2, %0"
   [(set_attr "length" "2,4,4,6")])
 
 ;;- Bit set (inclusive or) instructions
@@ -825,7 +830,136 @@
   "com<isfx> %0"
   [(set_attr "length" "2,4")])
 
+
 ;;- arithmetic shift instructions
+
+(define_expand "ashlhi3"
+  [(set (match_operand:HI 0 "register_operand" "")
+	(ashift:HI (match_operand:HI 1 "register_operand" "")
+		   (match_operand:HI 2 "shifthi_operand" "")))]
+  "")
+
+(define_expand "ashrhi3"
+  [(set (match_operand:HI 0 "register_operand" "")
+	(ashift:HI (match_operand:HI 1 "register_operand" "")
+		   (match_operand:HI 2 "shifthi_operand" "")))]
+  ""
+{
+  /* Arithmetic right shift on the pdp works by negating the shift count.  */
+  emit_insn (gen_ashlhi3 (operands[0], operands[1],
+			  negate_rtx (HImode, operands[2])));
+  DONE;
+})
+
+(define_insn "*aslhi3_one"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
+	(ashift:HI (match_operand:HI 1 "nonimmediate_operand" "0,0")
+		   (const_int 1)))]
+  ""
+  "asl %0"
+  [(set_attr "length" "2,4")])
+
+(define_insn "*asrhi3_one"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
+	(ashift:HI (match_operand:HI 1 "general_operand" "0,0")
+		   (const_int -1)))]
+  ""
+  "asr %0"
+  [(set_attr "length" "2,4")])
+
+(define_insn "*ashlhi3_40p"
+  [(set (match_operand:HI 0 "register_operand" "=r,r")
+	(ashift:HI (match_operand:HI 1 "register_operand" "0,0")
+		   (match_operand:HI 2 "general_operand" "rR,Qi")))]
+  "TARGET_40_PLUS"
+  "ash %2,%0"
+  [(set_attr "length" "2,4")])
+
+(define_insn_and_split "*ashlhi3_small"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(ashift:HI (match_operand:HI 1 "register_operand" "0")
+		   (match_operand:HI 2 "shifthi_operand" "n")))]
+  "!TARGET_40_PLUS"
+  "#"
+  "&& reload_completed"
+  [(const_int 0)]
+{
+  int i, n = INTVAL (operands[2]);
+  rtx shift, op = operands[0];
+
+  if (n == 0)
+    {
+      emit_note (NOTE_INSN_DELETED);
+      DONE;
+    }
+  /* Should have been matched by previous patterns.  */
+  gcc_checking_assert (n != 1 || n != -1);
+
+  /* Arithmetic right shift on the pdp works by negating the shift
+     count; support that as input from other shift ops.  */
+  shift = const1_rtx;
+  if (n < 0)
+    {
+      shift = constm1_rtx;
+      n = -n;
+    }
+
+  for (i = 0; i < n; ++i)
+    emit_insn (gen_ashlhi3 (op, op, shift));
+  DONE;
+})
+
+(define_expand "lshrhi3"
+  [(set (match_operand:HI 0 "register_operand" "")
+	(lshiftrt:HI (match_operand:HI 1 "register_operand" "")
+		     (match_operand:HI 2 "shifthi_operand" "")))]
+  ""
+{
+  if (!CONST_INT_P (operands[2]))
+    {
+      rtx tmp;
+
+      /* For variable shift, convert to an arithmetic shift of
+	 a zero-extended quantity.  */
+      gcc_checking_assert (TARGET_40_PLUS);
+      tmp = convert_to_mode (SImode, operands[1], 1);
+      emit_insn (gen_ashrsi3 (tmp, tmp, operands[2]));
+      emit_move_insn (operands[0], gen_lowpart (HImode, tmp));
+      DONE;
+    }
+})
+
+(define_insn_and_split "*lshrhi3_const"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(lshiftrt:HI (match_operand:HI 1 "register_operand" "0")
+		     (match_operand:HI 2 "const_shifthi_operand" "n")))]
+  ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
+{
+  rtx op = operands[0];
+  int i, n = INTVAL (operands[2]);
+
+  if (n == 0)
+    emit_note (NOTE_INSN_DELETED);
+  else if (n >= 16)
+    emit_move_insn (op, const0_rtx);
+  else if (TARGET_40_PLUS && n >= 2)
+    {
+      emit_insn (gen_ashlhi3 (op, op, GEN_INT (-n)));
+      emit_insn (gen_bichi3 (op, op, GEN_INT (~(0xffff >> n))));
+    }
+  else
+    {
+      emit_insn (gen_clear_carry_out ());
+      emit_insn (gen_rorhi_carry_in (op));
+      for (i = 1; i < n; ++i)
+	emit_insn (gen_ashlhi3 (op, op, constm1_rtx));
+    }
+  DONE;
+})
+
 (define_insn "ashlsi3"
   [(set (match_operand:SI 0 "register_operand" "=r,r")
 	(ashift:SI (match_operand:SI 1 "register_operand" "0,0")
@@ -834,224 +968,101 @@
   "ashc %2,%0"
   [(set_attr "length" "2,4")])
 
-;; Arithmetic right shift on the pdp works by negating the shift count.
 (define_expand "ashrsi3"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-	(ashift:SI (match_operand:SI 1 "register_operand" "0")
-		   (match_operand:HI 2 "general_operand" "g")))]
-  ""
+  [(set (match_operand:SI 0 "register_operand" "")
+	(ashift:SI (match_operand:SI 1 "register_operand" "")
+		   (match_operand:HI 2 "general_operand" "")))]
+  "TARGET_40_PLUS"
 {
   operands[2] = negate_rtx (HImode, operands[2]);
 })
 
-;; define asl aslb asr asrb - ashc missing!
+(define_insn_and_split "lshrsi3"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(lshiftrt:SI (match_operand:SI 1 "register_operand" "0,0")
+		     (match_operand:HI 2 "general_operand" "n,g")))
+   (clobber (match_scratch:HI 3 "=X,&r"))]
+  "TARGET_40_PLUS"
+  "#"
+  "&& reload_completed"
+  [(const_int 0)]
+{
+  rtx op = operands[0];
+  if (CONST_INT_P (operands[2]))
+    {
+      int n = INTVAL (operands[2]);
+      if (n == 0)
+	{
+	  emit_note (NOTE_INSN_DELETED);
+	  DONE;
+	}
+      emit_insn (gen_clear_carry_out ());
+      emit_insn (gen_rorhi_carry_in (gen_highpart (HImode, op)));
+      emit_insn (gen_rorhi_carry_in (gen_lowpart (HImode, op)));
+      if (n > 2)
+	emit_insn (gen_ashlsi3 (op, op, GEN_INT (1 - n)));
+    }
+  else
+    {
+      rtx shift, over, x;
 
-(define_insn "*asl"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(ashift:HI (match_operand:HI 1 "general_operand" "0,0")
-		   (const_int 1)))]
-  ""
+      shift = operands[3];
+      emit_move_insn (shift, operands[2]);
+
+      /* Skip the whole thing if the count is zero.  */
+      over = gen_label_rtx ();
+      x = gen_rtx_EQ (VOIDmode, shift, const0_rtx);
+      emit_jump_insn (gen_cbranchhi4 (x, shift, const0_rtx, over));
+
+      /* Shift right logical by one bit.  */
+      emit_insn (gen_clear_carry_out ());
+      emit_insn (gen_rorhi_carry_in (gen_highpart (HImode, op)));
+      emit_insn (gen_rorhi_carry_in (gen_lowpart (HImode, op)));
+
+      /* Now that the sign bit must be clear, shift right arithmetic
+	 by n-1, which is left shift by -n+1.  */
+      emit_insn (gen_neghi2 (shift, shift));
+      emit_insn (gen_addhi3 (shift, shift, const1_rtx));
+      emit_insn (gen_ashlsi3 (op, op, shift));
+
+      emit_label (over);
+    }
+  DONE;
+})
+
+(define_insn "clear_carry_out"
+  [(unspec_volatile [(const_int 0)] UNSPECV_CLC)]
+  "reload_completed"
+  "clc")
+
+(define_insn "aslhi_carry_out"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ASL))]
+  "reload_completed"
   "asl %0"
   [(set_attr "length" "2,4")])
 
-;; and another possibility for asr is << -1
-;; might cause problems since -1 can also be encoded as 65535!
-;; not in gcc2 ???
-
-(define_insn "*asr"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(ashift:HI (match_operand:HI 1 "general_operand" "0,0")
-		   (const_int -1)))]
+(define_insn "asrhi_carry_out"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ASR))]
   ""
   "asr %0"
   [(set_attr "length" "2,4")])
 
-(define_insn "lsrhi1"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(lshiftrt:HI (match_operand:HI 1 "general_operand" "0,0")
-		     (const_int 1)))]
-  ""
-  "clc\;ror %0"
-  [(set_attr "length" "4,6")])
-
-(define_insn "lsrsi1"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-	(lshiftrt:SI (match_operand:SI 1 "general_operand" "0")
-                     (const_int 1)))]
-  ""
-{
-  rtx lateoperands[2];
-
-  lateoperands[0] = operands[0];
-  operands[0] = gen_rtx_REG (HImode, REGNO (operands[0]) + 1);
-
-  lateoperands[1] = operands[1];
-  operands[1] = gen_rtx_REG (HImode, REGNO (operands[1]) + 1);
-
-  output_asm_insn ("clc", operands);
-  output_asm_insn ("ror %0", lateoperands);
-  output_asm_insn ("ror %0", operands);
-
-  return "";
-}
-  [(set_attr "length" "10")])
-
-(define_expand "lshrsi3"
-  [(match_operand:SI 0 "register_operand" "")
-   (match_operand:SI 1 "register_operand" "0")
-   (match_operand:HI 2 "general_operand" "")]
-  ""
-{
-  rtx r;
-
-  if (!TARGET_40_PLUS
-      && (GET_CODE (operands[2]) != CONST_INT
-	  || (unsigned) INTVAL (operands[2]) > 3))
-    FAIL;
-  emit_insn (gen_lsrsi1 (operands[0], operands[1]));
-  if (GET_CODE (operands[2]) != CONST_INT)
-    {
-      r = gen_reg_rtx (HImode);
-      emit_insn (gen_addhi3 (r, operands [2], GEN_INT (-1)));
-      emit_insn (gen_ashrsi3 (operands[0], operands[0], r));
-    }
-  else if ((unsigned) INTVAL (operands[2]) != 1)
-    {
-      emit_insn (gen_ashlsi3 (operands[0], operands[0],
-                              GEN_INT (1 - INTVAL (operands[2]))));
-    }
-  DONE;
-})
-
-;; shift is by arbitrary count is expensive,
-;; shift by one cheap - so let's do that, if
-;; space doesn't matter
-(define_insn ""
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=r")
-	(ashift:HI (match_operand:HI 1 "general_operand" "0")
-		   (match_operand:HI 2 "expand_shift_operand" "O")))]
-  "! optimize_size"
-{
-  register int i;
-
-  for (i = 1; i <= abs(INTVAL(operands[2])); i++)
-    if (INTVAL(operands[2]) < 0)
-      output_asm_insn ("asr %0", operands);
-    else
-      output_asm_insn ("asl %0", operands);
-  return "";
-}
-  ;; longest is 4
-  [(set (attr "length") (const_int 8))])
-
-;; aslb
-(define_insn "*aslb"
-  [(set (match_operand:QI 0 "nonimmediate_operand" "=r,o")
-	(ashift:QI (match_operand:QI 1 "general_operand" "0,0")
-		   (match_operand:HI 2 "const_int_operand" "n,n")))]
-  ""
-{ /* allowing predec or post_inc is possible, but hairy! */
-  int i, cnt;
-
-  cnt = INTVAL(operands[2]) & 0x0007;
-
-  for (i = 0; i < cnt ; i++)
-    output_asm_insn ("aslb %0", operands);
-
-  return "";
-}
-  ;; set attribute length ( match_dup 2 & 7 ) *(1 or 2) !!!
-  [(set_attr_alternative "length"
-                         [(const_int 14)
-                          (const_int 28)])])
-
-;;; asr
-;(define_insn ""
-;  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-;	(ashiftrt:HI (match_operand:HI 1 "general_operand" "0,0")
-;		     (const_int 1)))]
-;  ""
-;  "asr %0"
-;  [(set_attr "length" "2,4")])
-
-;; asrb
-(define_insn "*asrb"
-  [(set (match_operand:QI 0 "nonimmediate_operand" "=r,o")
-	(ashiftrt:QI (match_operand:QI 1 "general_operand" "0,0")
-		     (match_operand:HI 2 "const_int_operand" "n,n")))]
-  ""
-{ /* allowing predec or post_inc is possible, but hairy! */
-  int i, cnt;
-
-  cnt = INTVAL(operands[2]) & 0x0007;
-
-  for (i = 0; i < cnt ; i++)
-    output_asm_insn ("asrb %0", operands);
-
-  return "";
-}
-  [(set_attr_alternative "length"
-                         [(const_int 14)
-                          (const_int 28)])])
-
-;; can we get +-1 in the next pattern? should
-;; have been caught by previous patterns!
-
-(define_insn "ashlhi3"
-  [(set (match_operand:HI 0 "register_operand" "=r,r")
-	(ashift:HI (match_operand:HI 1 "register_operand" "0,0")
-		   (match_operand:HI 2 "general_operand" "rR,Qi")))]
-  "TARGET_40_PLUS"
-{
-  if (GET_CODE(operands[2]) == CONST_INT)
-    {
-      if (INTVAL(operands[2]) == 1)
-	return "asl %0";
-      else if (INTVAL(operands[2]) == -1)
-	return "asr %0";
-    }
-
-  return "ash %2,%0";
-}
+(define_insn "rorhi_carry_in"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ROR))]
+  "reload_completed"
+  "ror %0"
   [(set_attr "length" "2,4")])
 
-;; Arithmetic right shift on the pdp works by negating the shift count.
-(define_expand "ashrhi3"
-  [(set (match_operand:HI 0 "register_operand" "=r")
-	(ashift:HI (match_operand:HI 1 "register_operand" "0")
-		   (match_operand:HI 2 "general_operand" "g")))]
-  ""
-{
-  operands[2] = negate_rtx (HImode, operands[2]);
-})
-
-(define_expand "lshrhi3"
-  [(match_operand:HI 0 "register_operand" "")
-   (match_operand:HI 1 "register_operand" "")
-   (match_operand:HI 2 "general_operand" "")]
-  ""
-{
-  rtx r;
-
-  if (!TARGET_40_PLUS
-      && (GET_CODE (operands[2]) != CONST_INT
-	  || (unsigned) INTVAL (operands[2]) > 3))
-    FAIL;
-  emit_insn (gen_lsrhi1 (operands[0], operands[1]));
-  if (GET_CODE (operands[2]) != CONST_INT)
-    {
-      r = gen_reg_rtx (HImode);
-      emit_insn (gen_addhi3 (r, operands [2], GEN_INT (-1)));
-      emit_insn (gen_ashrhi3 (operands[0], operands[0], r));
-    }
-  else if ((unsigned) INTVAL (operands[2]) != 1)
-    {
-      emit_insn (gen_ashlhi3 (operands[0], operands[0],
-                              GEN_INT (1 - INTVAL (operands[2]))));
-    }
-  DONE;
-})
-
+(define_insn "rolhi_carry_in"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ROL))]
+  "reload_completed"
+  "rol %0"
+  [(set_attr "length" "2,4")])
+
 ;; absolute
 
 (define_insn "absdf2"

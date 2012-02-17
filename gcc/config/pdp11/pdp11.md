@@ -60,7 +60,7 @@
 
 ;; Integer modes supported on the PDP11, with a mapping from machine mode
 ;; to mnemonic suffix.  SImode and DImode always are special cases.
-(define_mode_iterator PDPint [QI HI])
+(define_mode_iterator I12 [QI HI])
 (define_mode_iterator I48 [SI DI])
 (define_mode_attr  isfx [(QI "b") (HI "")])
 
@@ -183,16 +183,16 @@
 
 (define_insn "*cmp<mode>"
   [(set (cc0)
-	(compare (match_operand:PDPint 0 "general_operand" "rR,rR,rR,Q,Qi,Qi")
-		 (match_operand:PDPint 1 "general_operand" "N,rR,Qi,N,rR,Qi")))]
+	(compare (match_operand:I12 0 "general_operand" "rR,rR,rR,Q,Qi,Qi")
+		 (match_operand:I12 1 "general_operand" "N,rR,Qi,N,rR,Qi")))]
   ""
   "@
-   tst<PDPint:isfx> %0
-   cmp<PDPint:isfx> %0,%1
-   cmp<PDPint:isfx> %0,%1
-   tst<PDPint:isfx> %0
-   cmp<PDPint:isfx> %0,%1
-   cmp<PDPint:isfx> %0,%1"
+   tst<isfx> %0
+   cmp<isfx> %0,%1
+   cmp<isfx> %0,%1
+   tst<isfx> %0
+   cmp<isfx> %0,%1
+   cmp<isfx> %0,%1"
   [(set_attr "length" "2,2,4,4,4,6")])
 
 ;; sob instruction - we need an assembler which can make this instruction
@@ -252,8 +252,8 @@
 
 (define_expand "cbranch<mode>4"
   [(set (cc0)
-        (compare (match_operand:PDPint 1 "general_operand")
-		 (match_operand:PDPint 2 "general_operand")))
+        (compare (match_operand:I12 1 "general_operand")
+		 (match_operand:I12 2 "general_operand")))
    (set (pc)
 	(if_then_else (match_operator 0 "ordered_comparison_operator"
 		       [(cc0) (const_int 0)])
@@ -334,13 +334,13 @@
   [(set_attr "length" "4,6,8,16")])
 
 (define_insn "mov<mode>"
-  [(set (match_operand:PDPint 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(match_operand:PDPint 1 "general_operand" "rRN,Qi,rRN,Qi"))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
+	(match_operand:I12 1 "general_operand" "rRN,Qi,rRN,Qi"))]
   ""
 {
   if (operands[1] == const0_rtx)
-    return "clr<PDPint:isfx> %0";
-  return "mov<PDPint:isfx> %1, %0";
+    return "clr<isfx> %0";
+  return "mov<isfx> %1, %0";
 }
   [(set_attr "length" "2,4,4,6")])
 
@@ -765,9 +765,9 @@
 ;; Bit-and on the pdp (like on the VAX) is done with a clear-bits insn.
 
 (define_expand "and<mode>3"
-  [(set (match_operand:PDPint 0 "nonimmediate_operand" "")
-	(and:PDPint (not:PDPint (match_operand:PDPint 1 "general_operand" ""))
-		    (match_operand:PDPint 2 "general_operand" "")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "")
+	(and:I12 (not:I12 (match_operand:I12 1 "general_operand" ""))
+		    (match_operand:I12 2 "general_operand" "")))]
   ""
 {
   rtx op1 = operands[1];
@@ -790,21 +790,21 @@
 })
 
 (define_insn "*bic<mode>"
-  [(set (match_operand:PDPint 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(and:PDPint
-	  (not:PDPint (match_operand:PDPint 1 "general_operand" "rR,Qi,rR,Qi"))
-	  (match_operand:PDPint 2 "general_operand" "0,0,0,0")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
+	(and:I12
+	  (not:I12 (match_operand:I12 1 "general_operand" "rR,Qi,rR,Qi"))
+	  (match_operand:I12 2 "general_operand" "0,0,0,0")))]
   ""
-  "bic<PDPint:isfx> %1, %0"
+  "bic<isfx> %1, %0"
   [(set_attr "length" "2,4,4,6")])
 
 ;;- Bit set (inclusive or) instructions
 (define_insn "ior<mode>3"
-  [(set (match_operand:PDPint 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(ior:PDPint (match_operand:PDPint 1 "general_operand" "%0,0,0,0")
-		(match_operand:PDPint 2 "general_operand" "rR,Qi,rR,Qi")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
+	(ior:I12 (match_operand:I12 1 "general_operand" "%0,0,0,0")
+		(match_operand:I12 2 "general_operand" "rR,Qi,rR,Qi")))]
   ""
-  "bis<PDPint:isfx> %2, %0"
+  "bis<isfx> %2, %0"
   [(set_attr "length" "2,4,4,6")])
 
 ;;- xor instructions
@@ -819,10 +819,10 @@
 ;;- one complement instructions
 
 (define_insn "one_cmpl<mode>2"
-  [(set (match_operand:PDPint 0 "nonimmediate_operand" "=rR,Q")
-        (not:PDPint (match_operand:PDPint 1 "general_operand" "0,0")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,Q")
+        (not:I12 (match_operand:I12 1 "general_operand" "0,0")))]
   ""
-  "com<PDPint:isfx> %0"
+  "com<isfx> %0"
   [(set_attr "length" "2,4")])
 
 ;;- arithmetic shift instructions
@@ -1095,8 +1095,8 @@
 })
 
 (define_insn "neg<mode>2"
-  [(set (match_operand:PDPint 0 "nonimmediate_operand" "=rR,Q")
-	(neg:PDPint (match_operand:PDPint 1 "general_operand" "0,0")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,Q")
+	(neg:I12 (match_operand:I12 1 "general_operand" "0,0")))]
   ""
   "neg<isfx> %0"
   [(set_attr "length" "2,4")])

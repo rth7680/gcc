@@ -26,6 +26,10 @@
     UNSPECV_BLOCKAGE
     UNSPECV_SETD
     UNSPECV_SETI
+    UNSPECV_ADD
+    UNSPECV_ADC
+    UNSPECV_SUB
+    UNSPECV_SBC
   ])
 
 (define_constants
@@ -57,6 +61,7 @@
 ;; Integer modes supported on the PDP11, with a mapping from machine mode
 ;; to mnemonic suffix.  SImode and DImode always are special cases.
 (define_mode_iterator PDPint [QI HI])
+(define_mode_iterator I48 [SI DI])
 (define_mode_attr  isfx [(QI "b") (HI "")])
 
 ;;- See file "rtl.def" for documentation on define_insn, match_*, et. al.
@@ -626,77 +631,30 @@
   "{addd|addf} %2, %0"
   [(set_attr "length" "2,4")])
 
-(define_insn "adddi3"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=&r,r,o,o")
-	(plus:DI (match_operand:DI 1 "general_operand" "%0,0,0,0")
-		 (match_operand:DI 2 "general_operand" "r,on,r,on")))]
+(define_insn_and_split "add<mode>3"
+  [(set (match_operand:I48 0 "nonimmediate_operand" "=&ro")
+	(plus:I48 (match_operand:I48 1 "general_operand" "%0")
+		  (match_operand:I48 2 "general_operand" "ron")))]
   ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
 {
-  rtx inops[2];
   rtx exops[4][2];
+  int i, j;
 
-  inops[0] = operands[0];
-  inops[1] = operands[2];
-  pdp11_expand_operands (inops, exops, 2, NULL, either);
+  pdp11_expand_operands (operands + 1, exops, 2, NULL, either);
 
-  if (!CONSTANT_P (exops[0][1]) || INTVAL (exops[0][1]) != 0)
-    output_asm_insn ("add %1, %0", exops[0]);
-  if (!CONSTANT_P (exops[1][1]) || INTVAL (exops[1][1]) != 0)
+  for (i = 0; i < (<MODE>mode == SImode ? 2 : 4); ++i)
     {
-      output_asm_insn ("add %1, %0", exops[1]);
-      output_asm_insn ("adc %0", exops[0]);
+      if (exops[i][1] == const0_rtx)
+	continue;
+      emit_insn (gen_addhi_carry_out (exops[i][0], exops[i][1]));
+      for (j = i - 1; j >= 0; --j)
+	emit_insn (gen_addhi_carry_in (exops[j][0]));
     }
-  if (!CONSTANT_P (exops[2][1]) || INTVAL (exops[2][1]) != 0)
-    {
-      output_asm_insn ("add %1, %0", exops[2]);
-      output_asm_insn ("adc %0", exops[1]);
-      output_asm_insn ("adc %0", exops[0]);
-    }
-  if (!CONSTANT_P (exops[3][1]) || INTVAL (exops[3][1]) != 0)
-    {
-      output_asm_insn ("add %1, %0", exops[3]);
-      output_asm_insn ("adc %0", exops[2]);
-      output_asm_insn ("adc %0", exops[1]);
-      output_asm_insn ("adc %0", exops[0]);
-    }
-
-  return "";
-}
-  [(set_attr "length" "20,28,40,48")])
-
-;; Note that the register operand is not marked earlyclobber.
-;; The reason is that SI values go in register pairs, so they
-;; can't partially overlap.  They can be either disjoint, or
-;; source and destination can be equal.  The latter case is
-;; handled properly because of the ordering of the individual
-;; instructions used.  Specifically, carry from the low to the
-;; high word is added at the end, so the adding of the high parts
-;; will always used the original high part and not a high part
-;; modified by carry (which would amount to double carry).
-(define_insn "addsi3"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,o,o")
-	(plus:SI (match_operand:SI 1 "general_operand" "%0,0,0,0")
-		 (match_operand:SI 2 "general_operand" "r,on,r,on")))]
-  ""
-{
-  rtx inops[2];
-  rtx exops[2][2];
-
-  inops[0] = operands[0];
-  inops[1] = operands[2];
-  pdp11_expand_operands (inops, exops, 2, NULL, either);
-
-  if (!CONSTANT_P (exops[0][1]) || INTVAL (exops[0][1]) != 0)
-    output_asm_insn ("add %1, %0", exops[0]);
-  if (!CONSTANT_P (exops[1][1]) || INTVAL (exops[1][1]) != 0)
-    {
-      output_asm_insn ("add %1, %0", exops[1]);
-      output_asm_insn ("adc %0", exops[0]);
-    }
-
-  return "";
-}
-  [(set_attr "length" "6,10,12,16")])
+  DONE;
+})
 
 (define_insn "addhi3"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,rR,Q,Q")
@@ -716,6 +674,27 @@
 }
   [(set_attr "length" "2,4,4,6")])
 
+;; Insns for add-with-carry-out and add-with-carry-in.
+;; This should use a flags register, but until everything clobbers the
+;; flags register properly, unspec_volatile is as good as we can get.
+
+;; Note that INC/DEC do not set the carry flag.
+(define_insn "addhi_carry_out"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,rR,Q,Q")
+	(unspec_volatile:HI
+	  [(match_dup 0)
+	   (match_operand:HI 1 "general_operand" "rR,Qi,rR,Qi")]
+	  UNSPECV_ADD))]
+  "reload_completed"
+  "add %1, %0"
+  [(set_attr "length" "2,4,4,6")])
+
+(define_insn "addhi_carry_in"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ADC))]
+  "reload_completed"
+  "adc %0"
+  [(set_attr "length" "2,4")])
 
 ;;- subtract instructions
 ;; we don't have to care for constant second
@@ -730,68 +709,28 @@
   "{subd|subf} %2, %0"
   [(set_attr "length" "2,4")])
 
-(define_insn "subdi3"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=&r,r,o,o")
-	(minus:DI (match_operand:DI 1 "general_operand" "0,0,0,0")
-		 (match_operand:DI 2 "general_operand" "r,on,r,on")))]
+(define_insn_and_split "sub<mode>3"
+  [(set (match_operand:I48 0 "nonimmediate_operand" "=&ro")
+	(minus:I48 (match_operand:I48 1 "general_operand" "0")
+		   (match_operand:I48 2 "general_operand" "ron")))]
   ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
 {
-  rtx inops[2];
   rtx exops[4][2];
+  int i, j;
 
-  inops[0] = operands[0];
-  inops[1] = operands[2];
-  pdp11_expand_operands (inops, exops, 2, NULL, either);
+  pdp11_expand_operands (operands + 1, exops, 2, NULL, either);
 
-  if (!CONSTANT_P (exops[0][1]) || INTVAL (exops[0][1]) != 0)
-    output_asm_insn ("sub %1, %0", exops[0]);
-  if (!CONSTANT_P (exops[1][1]) || INTVAL (exops[1][1]) != 0)
+  for (i = 0; i < (<MODE>mode == SImode ? 2 : 4); ++i)
     {
-      output_asm_insn ("sub %1, %0", exops[1]);
-      output_asm_insn ("sbc %0", exops[0]);
+      emit_insn (gen_subhi_carry_out (exops[i][0], exops[i][1]));
+      for (j = i - 1; j >= 0; --j)
+	emit_insn (gen_subhi_carry_in (exops[j][0]));
     }
-  if (!CONSTANT_P (exops[2][1]) || INTVAL (exops[2][1]) != 0)
-    {
-      output_asm_insn ("sub %1, %0", exops[2]);
-      output_asm_insn ("sbc %0", exops[1]);
-      output_asm_insn ("sbc %0", exops[0]);
-    }
-  if (!CONSTANT_P (exops[3][1]) || INTVAL (exops[3][1]) != 0)
-    {
-      output_asm_insn ("sub %1, %0", exops[3]);
-      output_asm_insn ("sbc %0", exops[2]);
-      output_asm_insn ("sbc %0", exops[1]);
-      output_asm_insn ("sbc %0", exops[0]);
-    }
-
-  return "";
-}
-  [(set_attr "length" "20,28,40,48")])
-
-(define_insn "subsi3"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,o,o")
-	(minus:SI (match_operand:SI 1 "general_operand" "0,0,0,0")
-		 (match_operand:SI 2 "general_operand" "r,on,r,on")))]
-  ""
-{
-  rtx inops[2];
-  rtx exops[2][2];
-
-  inops[0] = operands[0];
-  inops[1] = operands[2];
-  pdp11_expand_operands (inops, exops, 2, NULL, either);
-
-  if (!CONSTANT_P (exops[0][1]) || INTVAL (exops[0][1]) != 0)
-    output_asm_insn ("sub %1, %0", exops[0]);
-  if (!CONSTANT_P (exops[1][1]) || INTVAL (exops[1][1]) != 0)
-    {
-      output_asm_insn ("sub %1, %0", exops[1]);
-      output_asm_insn ("sbc %0", exops[0]);
-    }
-
-  return "";
-}
-  [(set_attr "length" "6,10,12,16")])
+  DONE;
+})
 
 (define_insn "subhi3"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,rR,Q,Q")
@@ -804,13 +743,31 @@
 }
   [(set_attr "length" "2,4,4,6")])
 
+(define_insn "subhi_carry_out"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,rR,Q,Q")
+	(unspec_volatile:HI
+	  [(match_dup 0)
+	   (match_operand:HI 1 "general_operand" "rR,Qi,rR,Qi")]
+	  UNSPECV_SUB))]
+  "reload_completed"
+  "sub %1, %0"
+  [(set_attr "length" "2,4,4,6")])
+
+(define_insn "subhi_carry_in"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_SBC))]
+  "reload_completed"
+  "sbc %0"
+  [(set_attr "length" "2,4")])
+
+
 ;;;;- and instructions
 ;; Bit-and on the pdp (like on the VAX) is done with a clear-bits insn.
 
 (define_expand "and<mode>3"
   [(set (match_operand:PDPint 0 "nonimmediate_operand" "")
 	(and:PDPint (not:PDPint (match_operand:PDPint 1 "general_operand" ""))
-		   (match_operand:PDPint 2 "general_operand" "")))]
+		    (match_operand:PDPint 2 "general_operand" "")))]
   ""
 {
   rtx op1 = operands[1];
@@ -1114,45 +1071,28 @@
   "{negd|negf} %0"
   [(set_attr "length" "2,4")])
 
-(define_insn "negdi2"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=r,o")
-	(neg:DI (match_operand:DI 1 "general_operand" "0,0")))]
+(define_insn_and_split "neg<mode>2"
+  [(set (match_operand:I48 0 "nonimmediate_operand" "=ro")
+	(neg:I48 (match_operand:I48 1 "general_operand" "0")))]
   ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
 {
   rtx exops[4][2];
+  int i, n = (<MODE>mode == SImode ? 2 : 4);
 
   pdp11_expand_operands (operands, exops, 1, NULL, either);
 
-  output_asm_insn ("com %0", exops[3]);
-  output_asm_insn ("com %0", exops[2]);
-  output_asm_insn ("com %0", exops[1]);
-  output_asm_insn ("com %0", exops[0]);
-  output_asm_insn ("add $1, %0", exops[3]);
-  output_asm_insn ("adc %0", exops[2]);
-  output_asm_insn ("adc %0", exops[1]);
-  output_asm_insn ("adc %0", exops[0]);
+  for (i = n - 1; i >= 0; --i)
+    emit_insn (gen_one_cmplhi2 (exops[i][0], exops[i][0]));
 
-  return "";
-}
-  [(set_attr "length" "18,34")])
+  emit_insn (gen_addhi_carry_out (exops[n - 1][0], const1_rtx));
+  for (i = n - 2; i >= 0; --i)
+    emit_insn (gen_addhi_carry_in (exops[i][0]));
 
-(define_insn "negsi2"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,o")
-	(neg:SI (match_operand:SI 1 "general_operand" "0,0")))]
-  ""
-{
-  rtx exops[2][2];
-
-  pdp11_expand_operands (operands, exops, 1, NULL, either);
-
-  output_asm_insn ("com %0", exops[1]);
-  output_asm_insn ("com %0", exops[0]);
-  output_asm_insn ("add $1, %0", exops[1]);
-  output_asm_insn ("adc %0", exops[0]);
-
-  return "";
-}
-  [(set_attr "length" "12,20")])
+  DONE;
+})
 
 (define_insn "neg<mode>2"
   [(set (match_operand:PDPint 0 "nonimmediate_operand" "=rR,Q")

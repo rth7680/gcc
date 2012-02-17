@@ -16,7 +16,7 @@
 # along with GCC; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
 
-MULTILIB_OPTIONS = msoft-float
+MULTILIB_OPTIONS = m10 msoft-float
 
 # Because the pdp11 POINTER_SIZE is only 16, in dwarf2out.c,
 # DWARF_ARANGES_PAD_SIZE is 0, thus a loop in output_aranges that checks

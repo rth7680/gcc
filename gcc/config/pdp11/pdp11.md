@@ -1183,8 +1183,8 @@
   [(const_int 0)]
   ""
   "nop")
-
 
+
 ;;- multiply
 
 (define_insn "muldf3"
@@ -1195,49 +1195,76 @@
   "{muld|mulf} %2, %0"
   [(set_attr "length" "2,4")])
 
-;; 16 bit result multiply:
-;; currently we multiply only into odd registers, so we don't use two
-;; registers - but this is a bit inefficient at times. If we define
-;; a register class for each register, then we can specify properly
-;; which register need which scratch register ....
+;; 16 bit result multiply.
+;; We force the use of odd numbered registers, so that we don't need
+;; extra clobbers.
 
 (define_insn "mulhi3"
-  [(set (match_operand:HI 0 "register_operand" "=d,d") ; multiply regs
+  [(set (match_operand:HI 0 "register_operand" "=d,d")
 	(mult:HI (match_operand:HI 1 "register_operand" "%0,0")
-		 (match_operand:HI 2 "float_operand" "rR,Qi")))]
-  "TARGET_40_PLUS"
-  "mul %2, %0"
-  [(set_attr "length" "2,4")])
-
-;; 32 bit result
-(define_expand "mulhisi3"
-  [(set (match_dup 3)
-	(match_operand:HI 1 "nonimmediate_operand" "g,g"))
-   (set (match_operand:SI 0 "register_operand" "=r,r") ; even numbered!
-	(mult:SI (truncate:HI
-                  (match_dup 0))
-		 (match_operand:HI 2 "general_operand" "rR,Qi")))]
-  "TARGET_40_PLUS"
-  "operands[3] = gen_lowpart(HImode, operands[1]);")
-
-(define_insn ""
-  [(set (match_operand:SI 0 "register_operand" "=r,r") ; even numbered!
-	(mult:SI (truncate:HI
-                  (match_operand:SI 1 "register_operand" "%0,0"))
 		 (match_operand:HI 2 "general_operand" "rR,Qi")))]
   "TARGET_40_PLUS"
   "mul %2, %0"
   [(set_attr "length" "2,4")])
 
-;(define_insn "mulhisi3"
-;  [(set (match_operand:SI 0 "register_operand" "=r,r") ; even numbered!
-;	(mult:SI (truncate:HI
-;                  (match_operand:SI 1 "register_operand" "%0,0"))
-;		 (match_operand:HI 2 "general_operand" "rR,Qi")))]
-;  "TARGET_40_PLUS"
-;  "mul %2, %0"
-;  [(set_attr "length" "2,4")])
+;; 32 bit result multiply.
+;; Getting the registers matched up is tricky.  If we use matching
+;; constraints, reload will put the HImode input into the odd numbered
+;; register (i.e. the low half of match with the SImode), which produces
+;; incorrect results.
 
+(define_insn_and_split "mulhisi3"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI
+	  (match_operand:HI 1 "general_operand" "g")
+	  (match_operand:HI 2 "general_operand" "g")))]
+  "TARGET_40_PLUS"
+{
+  if (REG_P (operands[1]) && REGNO (operands[0]) == REGNO (operands[1]))
+    return "mul %2, %0";
+  else
+    return "#";
+}
+  "&& reload_completed
+   && !(REG_P (operands[1]) && REGNO (operands[0]) == REGNO (operands[1]))"
+  [(set (match_dup 0) (mult:SI (match_dup 1) (match_dup 2)))]
+{
+  unsigned d = REGNO (operands[0]);
+  rtx dhi = gen_rtx_REG (HImode, d);
+
+  if (REG_P (operands[2]) && REGNO (operands[2]) == d)
+    {
+      dhi = operands[2];
+      operands[2] = operands[1];
+      operands[1] = dhi;
+    }
+  else if (!refers_to_regno_p (d, d, operands[2], NULL))
+    {
+      emit_move_insn (dhi, operands[1]);
+      operands[1] = dhi;
+    }
+  else if (!refers_to_regno_p (d, d, operands[1], NULL))
+    {
+      emit_move_insn (dhi, operands[2]);
+      operands[2] = operands[1];
+      operands[1] = dhi;
+    }
+  else
+    {
+      /* Both op1 and op2 refer to D.  The only way for this to be true
+         is for both operands to of the form (mem (plus d ofs)).  Since we
+	 do not have reg+reg addressing, this means that D+1 is available
+	 as a scratch.  Load both operands into registers.  */
+      rtx dlo = gen_rtx_REG (HImode, d + 1);
+      gcc_assert (!refers_to_regno_p (d + 1, d + 1, operands[1], NULL));
+      emit_move_insn (dlo, operands[2]);
+      emit_move_insn (dhi, operands[1]);
+      operands[1] = dhi;
+      operands[2] = dlo;
+    }
+})
+
+
 ;;- divide
 (define_insn "divdf3"
   [(set (match_operand:DF 0 "register_operand" "=a,a")

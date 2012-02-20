@@ -31,6 +31,7 @@
     UNSPECV_ADC
     UNSPECV_SUB
     UNSPECV_SBC
+    UNSPECV_NEG
     UNSPECV_ASL
     UNSPECV_ASR
     UNSPECV_ROR
@@ -660,6 +661,10 @@
       if (exops[i][1] == const0_rtx)
 	continue;
       emit_insn (gen_addhi_carry_out (exops[i][0], exops[i][1]));
+
+      /* Note that there is no two-operand add-with-carry insn.
+	 Thus the carry bit must be propagated all the way up
+	 for each input word for which we perform an add.  */
       for (j = i - 1; j >= 0; --j)
 	emit_insn (gen_addhi_carry_in (exops[j][0]));
     }
@@ -736,6 +741,10 @@
   for (i = 0; i < (<MODE>mode == SImode ? 2 : 4); ++i)
     {
       emit_insn (gen_subhi_carry_out (exops[i][0], exops[i][1]));
+
+      /* Note that there is no two-operand sub-with-borrow insn.
+	 Thus the carry bit must be propagated all the way up
+	 for each input word for which we perform a subtract.  */
       for (j = i - 1; j >= 0; --j)
 	emit_insn (gen_subhi_carry_in (exops[j][0]));
     }
@@ -1088,7 +1097,7 @@
   [(set_attr "length" "2,4")])
 
 (define_insn_and_split "neg<mode>2"
-  [(set (match_operand:I48 0 "nonimmediate_operand" "=ro")
+  [(set (match_operand:I48 0 "nonimmediate_operand" "=r<o")
 	(neg:I48 (match_operand:I48 1 "general_operand" "0")))]
   ""
   "#"
@@ -1098,15 +1107,14 @@
   rtx exops[4][2];
   int i, n = (<MODE>mode == SImode ? 2 : 4);
 
-  pdp11_expand_operands (operands, exops, 1, NULL, either);
+  pdp11_expand_operands (operands, exops, 1, NULL, little);
 
-  for (i = n - 1; i >= 0; --i)
-    emit_insn (gen_one_cmplhi2 (exops[i][0], exops[i][0]));
-
-  emit_insn (gen_addhi_carry_out (exops[n - 1][0], const1_rtx));
-  for (i = n - 2; i >= 0; --i)
-    emit_insn (gen_addhi_carry_in (exops[i][0]));
-
+  emit_insn (gen_neghi_carry_out (exops[0][0]));
+  for (i = 1; i < n; ++i)
+    {
+      emit_insn (gen_subhi_carry_in (exops[i][0]));
+      emit_insn (gen_neghi_carry_out (exops[i][0]));
+    }
   DONE;
 })
 
@@ -1115,6 +1123,13 @@
 	(neg:I12 (match_operand:I12 1 "general_operand" "0,0")))]
   ""
   "neg<isfx> %0"
+  [(set_attr "length" "2,4")])
+
+(define_insn "neghi_carry_out"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+	(unspec_volatile:HI [(match_dup 0)] UNSPECV_NEG))]
+  "reload_completed"
+  "neg %0"
   [(set_attr "length" "2,4")])
 
 ;; Unconditional and other jump instructions

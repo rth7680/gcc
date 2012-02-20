@@ -37,6 +37,11 @@
     UNSPECV_ROL
   ])
 
+(define_c_enum "unspec"
+  [
+    UNSPEC_DIVMOD
+  ])
+
 (define_constants
   [
    ;; Register numbers
@@ -1274,64 +1279,41 @@
   "{divd|divf} %2, %0"
   [(set_attr "length" "2,4")])
 
-
-(define_expand "divhi3"
-  [(set (subreg:HI (match_dup 1) 0)
-	(div:HI (match_operand:SI 1 "register_operand" "0")
-		(match_operand:HI 2 "general_operand" "g")))
-   (set (match_operand:HI 0 "register_operand" "=r")
-        (subreg:HI (match_dup 1) 0))]
+(define_expand "divmodhi4"
+  [(match_operand:HI 0 "register_operand" "")		; quotient
+   (match_operand:HI 1 "register_operand" "")		; dividend
+   (match_operand:HI 2 "general_operand" "")		; divisor
+   (match_operand:HI 3 "general_operand" "")]		; remainder
   "TARGET_40_PLUS"
-  "")
+{
+  rtx out, in;
 
-(define_insn ""
-  [(set (subreg:HI (match_operand:SI 0 "register_operand" "=r") 0)
-	(div:HI (match_operand:SI 1 "general_operand" "0")
-		(match_operand:HI 2 "general_operand" "g")))]
+  in = convert_modes (SImode, HImode, operands[1], 0);
+  in = force_reg (SImode, in);
+  out = gen_reg_rtx (SImode);
+  emit_insn (gen_divmodhi4_internal (out, in, operands[2]));
+
+  emit_move_insn (operands[0], gen_highpart (HImode, out));
+  emit_move_insn (operands[3], gen_lowpart (HImode, out));
+  DONE;
+})
+
+;; This is a 32/16->16 bit computation, thus the dividend must be properly
+;; sign-extended to SImode on input.  The result is a register pair containing
+;; both the quotient and the remainder; the only way to get the pair from the
+;; register allocator is to use an SImode output.  We *could* represent this
+;; with some rather complicated rtl (see s390 divmoddi4), but really this is
+;; no better than an unspec, particularly since we're forced to use differing
+;; operand sizes.  Also note that there's no div-by-0 trap, so may_trap_p is
+;; not affected.
+
+(define_insn "divmodhi4_internal"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+        (unspec:SI [(match_operand:SI 1 "register_operand" "0,0")
+		    (match_operand:HI 2 "general_operand" "rR,Qi")]
+		   UNSPEC_DIVMOD))]
   "TARGET_40_PLUS"
-  "div %2,%0"
-  [(set_attr "length" "4")])
-
-(define_expand "modhi3"
-  [(set (subreg:HI (match_dup 1) 2)
-	(mod:HI (match_operand:SI 1 "register_operand" "0")
-		(match_operand:HI 2 "general_operand" "g")))
-   (set (match_operand:HI 0 "register_operand" "=r")
-        (subreg:HI (match_dup 1) 2))]
-  "TARGET_40_PLUS"
-  "")
-
-(define_insn ""
-  [(set (subreg:HI (match_operand:SI 0 "register_operand" "=r") 2)
-	(mod:HI (match_operand:SI 1 "general_operand" "0")
-		(match_operand:HI 2 "general_operand" "g")))]
-  "TARGET_40_PLUS"
-  "div %2,%0"
-  [(set_attr "length" "4")])
-
-;(define_expand "divmodhi4"
-;  [(parallel [(set (subreg:HI (match_dup 1) 0)
-;	           (div:HI (match_operand:SI 1 "register_operand" "0")
-;		           (match_operand:HI 2 "general_operand" "g")))
-;              (set (subreg:HI (match_dup 1) 2)
-;	           (mod:HI (match_dup 1)
-;		           (match_dup 2)))])
-;   (set (match_operand:HI 3 "register_operand" "=r")
-;        (subreg:HI (match_dup 1) 2))
-;   (set (match_operand:HI 0 "register_operand" "=r")
-;        (subreg:HI (match_dup 1) 0))]
-;  "TARGET_40_PLUS"
-;  "")
-;
-;(define_insn ""
-;  [(set (subreg:HI (match_operand:SI 0 "register_operand" "=r") 0)
-;	           (div:HI (match_operand:SI 1 "general_operand" "0")
-;		           (match_operand:HI 2 "general_operand" "g")))
-;   (set (subreg:HI (match_dup 0) 2)
-;	           (mod:HI (match_dup 1)
-;		           (match_dup 2)))]
-;  "TARGET_40_PLUS"
-;  "div %2, %0")
-;
+  "div %2, %0"
+  [(set_attr "length" "2,4")])
 
 ;; is rotate doing the right thing to be included here ????

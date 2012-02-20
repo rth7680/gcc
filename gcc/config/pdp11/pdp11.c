@@ -1003,68 +1003,45 @@ pdp11_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED,
 const char *
 output_jump (enum rtx_code code, int inv, int length)
 {
-    static int x = 0;
-    
-    static char buf[1000];
-    const char *pos, *neg;
+  static char buf[64];
+  const char *br;
 
-    if (cc_prev_status.flags & CC_NO_OVERFLOW)
-      {
-	switch (code)
-	  {
-	  case GTU: code = GT; break;
-	  case LTU: code = LT; break;
-	  case GEU: code = GE; break;
-	  case LEU: code = LE; break;
-	  default: ;
-	  }
-      }
-    switch (code)
-      {
-      case EQ: pos = "beq", neg = "bne"; break;
-      case NE: pos = "bne", neg = "beq"; break;
-      case GT: pos = "bgt", neg = "ble"; break;
-      case GTU: pos = "bhi", neg = "blos"; break;
-      case LT: pos = "blt", neg = "bge"; break;
-      case LTU: pos = "blo", neg = "bhis"; break;
-      case GE: pos = "bge", neg = "blt"; break;
-      case GEU: pos = "bhis", neg = "blo"; break;
-      case LE: pos = "ble", neg = "bgt"; break;
-      case LEU: pos = "blos", neg = "bhi"; break;
-      default: gcc_unreachable ();
-      }
+  if (cc_prev_status.flags & CC_NO_OVERFLOW)
+    code = signed_condition (code);
 
-#if 0
-/* currently we don't need this, because the tstdf and cmpdf 
-   copy the condition code immediately, and other float operations are not 
-   yet recognized as changing the FCC - if so, then the length-cost of all
-   jump insns increases by one, because we have to potentially copy the 
-   FCC! */
-    if (cc_status.flags & CC_IN_FPU)
-	output_asm_insn("cfcc", NULL);
-#endif
-	
-    switch (length)
+  if (length == 6)
+    inv = !inv;
+  if (inv)
+    code = reverse_condition (code);
+
+  switch (code)
     {
-      case 2:
-	
-	sprintf(buf, "%s %%l1", inv ? neg : pos);
-	
-	return buf;
-	
-      case 6:
-	
-	sprintf(buf, "%s JMP_%d\n\tjmp %%l1\nJMP_%d:", inv ? pos : neg, x, x);
-	
-	x++;
-	
-	return buf;
-	
-      default:
-	
-	gcc_unreachable ();
+    case EQ:  br = "beq";  break;
+    case NE:  br = "bne";  break;
+    case GT:  br = "bgt";  break;
+    case GTU: br = "bhi";  break;
+    case LT:  br = "blt";  break;
+    case LTU: br = "blo";  break;
+    case GE:  br = "bge";  break;
+    case GEU: br = "bhis"; break;
+    case LE:  br = "ble";  break;
+    case LEU: br = "blos"; break;
+    default:
+      gcc_unreachable ();
     }
-    
+
+  switch (length)
+    {
+    case 2:
+      sprintf(buf, "%s %%l1", br);
+      break;
+    case 6:
+      sprintf(buf, "%s .+6\n\tjmp %%l1", br);
+      break;
+    default:
+      gcc_unreachable ();
+    }
+  return buf;
 }
 
 void

@@ -35,23 +35,24 @@
        (and (match_code "const_int")
 	    (match_test "IN_RANGE (INTVAL (op), -4, 4)"))))
 
-;; Accept anything general_operand accepts, except that registers must
-;; be FPU registers.
-(define_predicate "float_operand"
-  (if_then_else (match_code "reg")
-		(ior 
-		 (match_test "REGNO_REG_CLASS (REGNO (op)) == LOAD_FPU_REGS")
-		 (match_test "REGNO_REG_CLASS (REGNO (op)) == NO_LOAD_FPU_REGS"))
-		(match_operand 0 "general_operand")))
+;; Accept only hard floating point registers
+(define_predicate "hard_float_reg_operand"
+  (and (match_code "reg")
+       (match_test "IN_RANGE (REGNO (op), AC0_REGNUM, AC5_REGNUM)")))
 
-;; Accept anything nonimmediate_operand accepts, except that registers must
-;; be FPU registers.
+;; Accept anything general_operand accepts,
+;; except that hard registers must be FPU registers.
+(define_predicate "float_operand"
+  (if_then_else (match_test "REG_P (op) && HARD_REGISTER_P (op)")
+    (match_operand 0 "hard_float_reg_operand")
+    (match_operand 0 "general_operand")))
+
+;; Accept anything nonimmediate_operand accepts,
+;; except that hard registers must be FPU registers.
 (define_predicate "float_nonimm_operand"
-  (if_then_else (match_code "reg")
-		(ior 
-		 (match_test "REGNO_REG_CLASS (REGNO (op)) == LOAD_FPU_REGS")
-		 (match_test "REGNO_REG_CLASS (REGNO (op)) == NO_LOAD_FPU_REGS"))
-		(match_operand 0 "nonimmediate_operand")))
+  (if_then_else (match_test "REG_P (op) && HARD_REGISTER_P (op)")
+    (match_operand 0 "hard_float_reg_operand")
+    (match_operand 0 "nonimmediate_operand")))
 
 ;; Return true for any operand that would require an extra word.
 ;; This includes constants and memories including constants.

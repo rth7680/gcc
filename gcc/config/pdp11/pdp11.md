@@ -354,23 +354,29 @@
 
 ;; Move instructions
 
-(define_insn "movdi"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=&r,g")
-	(match_operand:DI 1 "general_operand" "rN,g"))]
+(define_insn_and_split "movdi"
+  [(set (match_operand:DI 0 "nonimmediate_operand" "=g")
+	(match_operand:DI 1 "general_operand" "g"))]
   ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
 {
-  return output_move_multiple (operands);
-}
-  [(set_attr "length" "16,32")])		;; NEED_SPLIT
+  split_move_multiple (operands);
+  DONE;
+})
 
-(define_insn "movsi"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,g,g")
-	(match_operand:SI 1 "general_operand" "rN,IJ,IJ,g"))]
+(define_insn_and_split "movsi"
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=g")
+	(match_operand:SI 1 "general_operand" "g"))]
   ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
 {
-  return output_move_multiple (operands);
-}
-  [(set_attr "length" "4,6,8,16")])		;; NEED_SPLIT
+  split_move_multiple (operands);
+  DONE;
+})
 
 (define_insn "mov<mode>"
   [(set (match_operand:I12 0 "nonimmediate_operand" "=rm,rm")
@@ -381,41 +387,39 @@
    mov<isfx> %1, %0"
   [(set_attr "extra_word_ops" "op0,op01")])
 
-(define_insn "movdf"
-  [(set (match_operand:DF 0 "float_nonimm_operand" "=a,fR,a,Q,g")
-        (match_operand:DF 1 "float_operand" "fR,a,FQ,a,g"))]
+(define_insn_and_split "movdf"
+  [(set (match_operand:DF 0 "nonimmediate_operand" "=a,fm,rm")
+        (match_operand:DF 1 "float_operand"       "fmF, a, g"))]
   "TARGET_FPU"
+  "@
+   ldd %1, %0
+   std %1, %0
+   #"
+  "&& reload_completed
+   && !hard_float_reg_operand (operands[0], DFmode)
+   && !hard_float_reg_operand (operands[1], DFmode)"
+  [(const_int 0)]
 {
-  switch (which_alternative)
-    {
-    case 0: case 2:
-      return "ldd %1, %0";
-    case 1: case 3:
-      return "std %1, %0";
-    default:
-      return output_move_multiple (operands);
-    }
+  split_move_multiple (operands);
 }
-  ;; last one is worst-case
-  [(set_attr "length" "2,2,4,4,24")])		;; NEED_SPLIT
+  [(set_attr "extra_word_ops" "op01")])
 
-(define_insn "movsf"
-  [(set (match_operand:SF 0 "float_nonimm_operand" "=a,fR,a,Q,g")
-        (match_operand:SF 1 "float_operand" "fR,a,FQ,a,g"))]
+(define_insn_and_split "movsf"
+  [(set (match_operand:SF 0 "float_nonimm_operand" "=a,fm,rm")
+        (match_operand:SF 1 "float_operand"       "fmF, a,g"))]
   "TARGET_FPU"
+  "@
+   {ldcfd|movof} %1, %0
+   {stcdf|movfo} %1, %0
+   #"
+  "&& reload_completed
+   && !hard_float_reg_operand (operands[0], SFmode)
+   && !hard_float_reg_operand (operands[1], SFmode)"
+  [(const_int 0)]
 {
-  switch (which_alternative)
-    {
-    case 0: case 2:
-      return "{ldcfd|movof} %1, %0";
-    case 1: case 3:
-      return "{stcdf|movfo} %1, %0";
-    default:
-      return output_move_multiple (operands);
-    }
+  split_move_multiple (operands);
 }
-  ;; last one is worst-case
-  [(set_attr "length" "2,2,4,4,12")])		;; NEED_SPLIT
+  [(set_attr "extra_word_ops" "op01")])
 
 ;; maybe fiddle a bit with move_ratio, then
 ;; let constraints only accept a register ...

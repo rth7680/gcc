@@ -143,7 +143,6 @@ decode_pdp11_d (const struct real_format *fmt ATTRIBUTE_UNUSED,
 /* This is where the condition code register lives.  */
 /* rtx cc0_reg_rtx; - no longer needed? */
 
-static const char *singlemove_string (rtx *);
 static bool pdp11_assemble_integer (rtx, unsigned int, int);
 static bool pdp11_rtx_costs (rtx, int, int, int, int *, bool);
 static bool pdp11_return_in_memory (const_tree, const_tree);
@@ -444,35 +443,23 @@ pdp11_expand_epilogue (void)
 
   emit_jump_insn (gen_return ());
 }
-
-/* Return the best assembler insn template
-   for moving operands[1] into operands[0] as a fullword.  */
-static const char *
-singlemove_string (rtx *operands)
-{
-  if (operands[1] != const0_rtx)
-    return "mov %1,%0";
-
-  return "clr %0";
-}
-
 
 /* Expand multi-word operands (SImode or DImode) into the 2 or 4
    corresponding HImode operands.  The number of operands is given
    as the third argument, and the required order of the parts as
    the fourth argument.  */
-bool
+
+void
 pdp11_expand_operands (rtx *operands, rtx exops[][2], int opcount, 
 		       pdp11_action *action, pdp11_partorder order)
 {
-  int words, op, w, i, sh;
+  int words, op, w, i;
   pdp11_partorder useorder;
   bool sameoff = false;
-  enum { REGOP, OFFSOP, MEMOP, PUSHOP, POPOP, CNSTOP, RNDOP } optype;
-  REAL_VALUE_TYPE r;
-  long sval[2];
+  enum { REGOP, OFFSOP, PUSHOP, POPOP, CNSTOP } optype;
+  enum machine_mode imode = GET_MODE (operands[0]);
   
-  words = GET_MODE_BITSIZE (GET_MODE (operands[0])) / 16;
+  words = GET_MODE_SIZE (imode) / UNITS_PER_WORD;
   
   /* If either piece order is accepted and one is pre-decrement
      while the other is post-increment, set order to be high order
@@ -486,25 +473,26 @@ pdp11_expand_operands (rtx *operands, rtx exops[][2], int opcount,
   useorder = either;
   if (opcount == 2)
     {
-      if (!REG_P (operands[0]) && !REG_P (operands[1]) &&
-	  !(CONSTANT_P (operands[1]) || 
-	    GET_CODE (operands[1]) == CONST_DOUBLE) &&
-	  ((GET_CODE (XEXP (operands[0], 0)) == POST_INC &&
-	    GET_CODE (XEXP (operands[1], 0)) == PRE_DEC) ||
-	   (GET_CODE (XEXP (operands[0], 0)) == PRE_DEC &&
-	    GET_CODE (XEXP (operands[1], 0)) == POST_INC)))
+      if (MEM_P (operands[0]))
+	{
+	  if (GET_CODE (XEXP (operands[0], 0)) == POST_INC)
 	    useorder = big;
-      else if ((!REG_P (operands[0]) &&
-		GET_CODE (XEXP (operands[0], 0)) == PRE_DEC) ||
-	       (!REG_P (operands[1]) &&
-		!(CONSTANT_P (operands[1]) || 
-		  GET_CODE (operands[1]) == CONST_DOUBLE) &&
-		GET_CODE (XEXP (operands[1], 0)) == PRE_DEC))
-	useorder = little;
-      else if (REG_P (operands[0]) && REG_P (operands[1]) &&
-	       REGNO (operands[0]) > REGNO (operands[1]) &&
-	       REGNO (operands[0]) < REGNO (operands[1]) + words)
+	  else if (GET_CODE (XEXP (operands[0], 0)) == PRE_DEC)
 	    useorder = little;
+	}
+      else if (MEM_P (operands[1]))
+	{
+	  if (GET_CODE (XEXP (operands[1], 0)) == POST_INC)
+	    useorder = big;
+	  else if (GET_CODE (XEXP (operands[1], 0)) == PRE_DEC)
+	    useorder = little;
+	}
+      else if (REG_P (operands[0]) && REG_P (operands[1]))
+	{
+	  if (REGNO (operands[0]) > REGNO (operands[1])
+	      && REGNO (operands[0]) < REGNO (operands[1]) + words)
+	    useorder = little;
+	}
 
       /* Check for source == offset from register and dest == push of
 	 the same register.  In that case, we have to use the same
@@ -512,7 +500,7 @@ pdp11_expand_operands (rtx *operands, rtx exops[][2], int opcount,
 	 the push increases the offset to each source word.
 	 In theory there are other cases like this, for example dest == pop,
 	 but those don't occur in real life so ignore those.  */
-      if (GET_CODE (operands[0]) ==  MEM 
+      if (MEM_P (operands[0])
 	  && GET_CODE (XEXP (operands[0], 0)) == PRE_DEC
 	  && REGNO (XEXP (XEXP (operands[0], 0), 0)) == STACK_POINTER_REGNUM
 	  && reg_overlap_mentioned_p (stack_pointer_rtx, operands[1]))
@@ -535,25 +523,24 @@ pdp11_expand_operands (rtx *operands, rtx exops[][2], int opcount,
       /* First classify the operand.  */
       if (REG_P (operands[op]))
 	optype = REGOP;
-      else if (CONSTANT_P (operands[op])
-	       || GET_CODE (operands[op]) == CONST_DOUBLE)
-	optype = CNSTOP;
-      else if (GET_CODE (XEXP (operands[op], 0)) == POST_INC)
-	optype = POPOP;
-      else if (GET_CODE (XEXP (operands[op], 0)) == PRE_DEC)
-	optype = PUSHOP;
-      else if (!reload_in_progress || offsettable_memref_p (operands[op]))
-	optype = OFFSOP;
-      else if (GET_CODE (operands[op]) == MEM)
-	optype = MEMOP;
+      else if (MEM_P (operands[op]))
+	{
+	  if (GET_CODE (XEXP (operands[op], 0)) == POST_INC)
+	    optype = POPOP;
+	  else if (GET_CODE (XEXP (operands[op], 0)) == PRE_DEC)
+	    optype = PUSHOP;
+	  else
+	    {
+	      gcc_assert (offsettable_memref_p (operands[op]));
+	      optype = OFFSOP;
+	    }
+	}
       else
-	optype = RNDOP;
+	{
+	  gcc_checking_assert (CONSTANT_P (operands[op]));
+	  optype = CNSTOP;
+	}
 
-      /* Check for the cases that the operand constraints are not
-	 supposed to allow to happen. Return failure for such cases.  */
-      if (optype == RNDOP)
-	return false;
-      
       if (action != NULL)
 	action[op] = no_action;
       
@@ -565,8 +552,8 @@ pdp11_expand_operands (rtx *operands, rtx exops[][2], int opcount,
 	{
 	  gcc_assert (action != NULL);
 	  action[op] = dec_before;
-	  operands[op] = gen_rtx_MEM (GET_MODE (operands[op]),
-				      XEXP (XEXP (operands[op], 0), 0));
+	  operands[op] = change_address (operands[op], VOIDmode,
+					 XEXP (XEXP (operands[0], 0), 0));
 	  optype = OFFSOP;
 	}
       /* If the operand uses post-increment mode but we want 
@@ -577,59 +564,62 @@ pdp11_expand_operands (rtx *operands, rtx exops[][2], int opcount,
 	{
 	  gcc_assert (action != NULL);
 	  action[op] = inc_after;
-	  operands[op] = gen_rtx_MEM (GET_MODE (operands[op]),
-				      XEXP (XEXP (operands[op], 0), 0));
+	  operands[op] = change_address (operands[op], VOIDmode,
+					 XEXP (XEXP (operands[0], 0), 0));
 	  optype = OFFSOP;
 	}
 
-      if (GET_CODE (operands[op]) == CONST_DOUBLE)
-	{
-	  REAL_VALUE_FROM_CONST_DOUBLE (r, operands[op]);
-	  REAL_VALUE_TO_TARGET_DOUBLE (r, sval);
-	}
-      
       for (i = 0; i < words; i++)
 	{
+	  int b;
+	  rtx x;
+
 	  if (order == big)
 	    w = i;
 	  else if (sameoff)
 	    w = words - 1;
 	  else
 	    w = words - 1 - i;
+	  b = w * UNITS_PER_WORD;
 
 	  /* Set the output operand to be word "w" of the input.  */
-	  if (optype == REGOP)
-	    exops[i][op] = gen_rtx_REG (HImode, REGNO (operands[op]) + w);
-	  else if (optype == OFFSOP)
-	    exops[i][op] = adjust_address (operands[op], HImode, w * 2);
-	  else if (optype == CNSTOP)
+	  x = operands[op];
+	  switch (optype)
 	    {
-	      if (GET_CODE (operands[op]) == CONST_DOUBLE)
-		{
-		  sh = 16 - (w & 1) * 16;
-		  exops[i][op] = gen_rtx_CONST_INT (HImode, (sval[w / 2] >> sh) & 0xffff);
-		}
-	      else
-		{
-		  sh = ((words - 1 - w) * 16);
-		  exops[i][op] = gen_rtx_CONST_INT (HImode, trunc_int_for_mode (INTVAL(operands[op]) >> sh, HImode));
-		}
+	    case REGOP:
+	    case CNSTOP:
+	      x = simplify_gen_subreg (HImode, x, imode, b);
+	      gcc_assert (x != NULL);
+	      break;
+	    case OFFSOP:
+	      x = adjust_address_nv (operands[op], HImode, b);
+	      break;
+	    case POPOP:
+	      x = XEXP (XEXP (x, 0), 0);
+	      x = gen_rtx_POST_INC (HImode, x);
+	      x = adjust_automodify_address_nv (operands[op], HImode, x, b);
+	      break;
+	    case PUSHOP:
+	      x = XEXP (XEXP (x, 0), 0);
+	      x = gen_rtx_PRE_DEC (HImode, x);
+	      x = adjust_automodify_address_nv (operands[op], HImode, x, b);
+	      break;
+	    default:
+	      gcc_unreachable ();
 	    }
-	  else
-	    exops[i][op] = operands[op];
+	  exops[i][op] = x;
 	}
     }
-  return true;
 }
 
-/* Output assembler code to perform a multiple-word move insn
+/* Output rtl code to perform a multiple-word move insn
    with operands OPERANDS.  This moves 2 or 4 words depending
    on the machine mode of the operands.  */
 
-const char *
-output_move_multiple (rtx *operands)
+void
+split_move_multiple (rtx *operands)
 {
-  rtx exops[4][2];
+  rtx exops[4][2], tmp;
   pdp11_action action[2];
   int i, words;
   
@@ -637,35 +627,33 @@ output_move_multiple (rtx *operands)
 
   pdp11_expand_operands (operands, exops, 2, action, either);
   
-  /* Check for explicit decrement before.  */
+  /* Check for decrement before.  */
   if (action[0] == dec_before)
     {
-      operands[0] = XEXP (operands[0], 0);
-      output_asm_insn ("sub $4,%0", operands);
+      tmp = XEXP (operands[0], 0);
+      emit_insn (gen_addhi3 (tmp, tmp, GEN_INT (words * -UNITS_PER_WORD)));
     }
   if (action[1] == dec_before)
     {
-      operands[1] = XEXP (operands[1], 0);
-      output_asm_insn ("sub $4,%1", operands);
+      tmp = XEXP (operands[1], 0);
+      emit_insn (gen_addhi3 (tmp, tmp, GEN_INT (words * -UNITS_PER_WORD)));
     }
 
   /* Do the words.  */
   for (i = 0; i < words; i++)
-    output_asm_insn (singlemove_string (exops[i]), exops[i]);
+    emit_move_insn (exops[i][0], exops[i][1]);
 
   /* Check for increment after.  */
   if (action[0] == inc_after)
     {
-      operands[0] = XEXP (operands[0], 0);
-      output_asm_insn ("add $4,%0", operands);
+      tmp = XEXP (operands[0], 0);
+      emit_insn (gen_addhi3 (tmp, tmp, GEN_INT (words * UNITS_PER_WORD)));
     }
   if (action[1] == inc_after)
     {
-      operands[1] = XEXP (operands[1], 0);
-      output_asm_insn ("add $4,%1", operands);
+      tmp = XEXP (operands[1], 0);
+      emit_insn (gen_addhi3 (tmp, tmp, GEN_INT (words * UNITS_PER_WORD)));
     }
-
-  return "";
 }
 
 /* Output an ascii string.  */

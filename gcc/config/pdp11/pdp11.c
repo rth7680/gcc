@@ -902,8 +902,10 @@ pdp11_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED,
       return true;
 
     case CONST_DOUBLE:
-      /* Twice (or 4 times) as expensive as 16 bit.  */
-      *total = 4;
+      if (GET_MODE (x) == VOIDmode)
+        *total = 4;	/* DImode, twice as expensive.  */
+      else
+	*total = 2;	/* Legitimate FP constant is only high 16 bits.  */
       return true;
 
     case MULT:
@@ -936,32 +938,26 @@ pdp11_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED,
       *total = COSTS_N_INSNS (3);
       return false;
 
-    case ZERO_EXTEND:
-      /* Only used for qi->hi.  */
-      *total = COSTS_N_INSNS (1);
-      return false;
-
     case SIGN_EXTEND:
       if (GET_MODE (x) == HImode)
       	*total = COSTS_N_INSNS (1);
       else if (GET_MODE (x) == SImode)
-	*total = COSTS_N_INSNS (6);
+	*total = COSTS_N_INSNS (TARGET_40_PLUS ? 2 : 4);
       else
-	*total = COSTS_N_INSNS (2);
+	*total = COSTS_N_INSNS (8);
       return false;
 
-    case ASHIFT:
     case LSHIFTRT:
-    case ASHIFTRT:
-      if (optimize_size)
-        *total = COSTS_N_INSNS (1);
-      else if (GET_MODE (x) ==  QImode)
+      if (optimize_size || TARGET_40_PLUS)
         {
-          if (GET_CODE (XEXP (x, 1)) != CONST_INT)
-   	    *total = COSTS_N_INSNS (8); /* worst case */
-          else
-	    *total = COSTS_N_INSNS (INTVAL (XEXP (x, 1)));
-        }
+          *total = COSTS_N_INSNS (GET_MODE (x) == SImode ? 3 : 2);
+	  return false;
+	}
+      /* FALLTHRU */
+    case ASHIFT:
+    case ASHIFTRT:
+      if (optimize_size || TARGET_40_PLUS)
+        *total = COSTS_N_INSNS (1);
       else if (GET_MODE (x) == HImode)
         {
           if (GET_CODE (XEXP (x, 1)) == CONST_INT)

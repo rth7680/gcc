@@ -36,6 +36,8 @@
     UNSPECV_ASR
     UNSPECV_ROR
     UNSPECV_ROL
+    UNSPECV_MOV
+    UNSPECV_SXT
   ])
 
 (define_c_enum "unspec"
@@ -387,6 +389,16 @@
    mov<isfx> %1, %0"
   [(set_attr "extra_word_ops" "op0,op01")])
 
+(define_insn "*mov<mode>_flags_out"
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm,rm")
+	(unspec_volatile:I12 [(match_operand:I12 1 "general_operand" "N,g")]
+			     UNSPECV_MOV))]
+  "reload_completed"
+  "@
+   clr<isfx> %0
+   mov<isfx> %1, %0"
+  [(set_attr "extra_word_ops" "op0,op01")])
+
 (define_insn_and_split "movdf"
   [(set (match_operand:DF 0 "nonimmediate_operand" "=a,fm,rm")
         (match_operand:DF 1 "float_operand"       "fmF, a, g"))]
@@ -494,91 +506,123 @@
   "movb %1, %0"
   [(set_attr "extra_word_ops" "op1")])
 
-(define_insn "extendqisi2"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-	(sign_extend:SI (match_operand:QI 1 "general_operand" "g")))]
-  "TARGET_40_PLUS"
-{
-  operands[2] = gen_lowpart (HImode, operands[0]);
-  operands[0] = gen_highpart (HImode, operands[0]);
-  return "movb %1, %2\;sxt %0";
-}
+(define_insn "*extendqihi_flags_out"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(unspec_volatile:HI [(match_operand:QI 1 "general_operand" "g")]
+			    UNSPECV_MOV))]
+  "reload_completed"
+  "movb %1, %0"
   [(set_attr "extra_word_ops" "op1")])
 
+(define_expand "extendqisi2"
+  [(set (match_operand:SI 0 "register_operand" "")
+	(sign_extend:SI (match_operand:QI 1 "general_operand" "")))]
+  "")
+
 (define_expand "extendhisi2"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "")
+  [(set (match_operand:SI 0 "register_operand" "")
 	(sign_extend:SI (match_operand:HI 1 "general_operand" "")))]
   "")
 
-(define_insn "*extendhisi2_40p"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=o,<,r")
-	(sign_extend:SI (match_operand:HI 1 "general_operand" "g,g,g")))]
-  "TARGET_40_PLUS"
-{
-  rtx latehalf[2];
-
-  /* we don't want to mess with auto increment */
-
-  switch (which_alternative)
-    {
-    case 0:
-      latehalf[0] = operands[0];
-      operands[0] = adjust_address(operands[0], HImode, 2);
-
-      output_asm_insn("mov %1, %0", operands);
-      output_asm_insn("sxt %0", latehalf);
-      return "";
-
-    case 1:
-      /* - auto-decrement - right direction ;-) */
-      output_asm_insn("mov %1, %0", operands);
-      output_asm_insn("sxt %0", operands);
-      return "";
-
-    case 2:
-      latehalf[0] = operands[0];
-      operands[0] = gen_rtx_REG (HImode, REGNO (operands[0]) + 1);
-
-      output_asm_insn("mov %1, %0", operands);
-      output_asm_insn("sxt %0", latehalf);
-      return "";
-
-    default:
-      gcc_unreachable ();
-    }
-}
-  [(set_attr "length" "10,6,6")])		;; NEED_SPLIT
-
-
-(define_insn ""
+(define_insn "*extendqisi2_40p"
   [(set (match_operand:SI 0 "register_operand" "=r")
-	(sign_extend:SI (match_operand:HI 1 "general_operand" "0")))]
+	(sign_extend:SI (match_operand:QI 1 "general_operand" "g")))]
+  "TARGET_40_PLUS"
+  "#")
+
+(define_insn "*extendhisi2_40p"
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=ro<")
+	(sign_extend:SI (match_operand:HI 1 "general_operand" "g")))]
+  "TARGET_40_PLUS"
+  "#")
+
+(define_insn "*extendqisi2_10"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(sign_extend:SI (match_operand:QI 1 "general_operand" "g")))]
   "!TARGET_40_PLUS"
+  "#")
+
+(define_insn "*extendhisi2_10"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(sign_extend:SI (match_operand:HI 1 "general_operand" "g")))]
+  "!TARGET_40_PLUS"
+  "#")
+
+;; Split both QI and HImode extensions to SImode, for 40+.
+(define_split
+  [(set (match_operand:SI 0 "nonimmediate_operand")
+	(sign_extend:SI (match_operand 1 "general_operand")))]
+  "TARGET_40_PLUS && reload_completed"
+  [(set (match_dup 2) (unspec_volatile:HI [(match_dup 1)] UNSPECV_MOV))
+   (set (match_dup 0) (unspec_volatile:HI [(const_int 0)] UNSPECV_SXT))]
 {
-  static int count = 0;
-  char buf[100];
-  rtx lateoperands[2];
+  rtx exops[1][2];
+  pdp11_expand_operands (operands, exops, 1, NULL, little);
+  operands[2] = exops[0][0];
+  operands[0] = exops[1][0];
+})
 
-  lateoperands[0] = operands[0];
-  operands[0] = gen_rtx_REG (HImode, REGNO (operands[0]) + 1);
+;; Split both QI and HImode extensions to SImode, for non-40+
+(define_split
+  [(set (match_operand:SI 0 "register_operand")
+	(sign_extend:SI (match_operand 1 "general_operand")))]
+  "!TARGET_40_PLUS && reload_completed"
+  [(const_int 0)]
+{
+  rtx hi = gen_highpart (HImode, operands[0]);
+  rtx lo = gen_lowpart (HImode, operands[0]);
+  rtx lab1, lab2, x;
 
-  output_asm_insn ("tst %0", operands);
-  sprintf (buf, "bge extendhisi%d", count);
-  output_asm_insn (buf, NULL);
-  output_asm_insn ("mov -1, %0", lateoperands);
-  sprintf (buf, "bne extendhisi%d", count+1);
-  output_asm_insn (buf, NULL);
-  sprintf (buf, "\\nextendhisi%d:", count);
-  output_asm_insn (buf, NULL);
-  output_asm_insn ("clr %0", lateoperands);
-  sprintf (buf, "\\nextendhisi%d:", count+1);
-  output_asm_insn (buf, NULL);
+  if (!reg_overlap_mentioned_p (hi, operands[1]))
+    {
+      lab1 = gen_label_rtx ();
 
-  count += 2;
+      emit_move_insn (hi, const0_rtx);
 
-  return "";
-}
-  [(set_attr "length" "12")])			;; NEED_SPLIT
+      if (GET_MODE (operands[1]) == HImode)
+	emit_move_insn (lo, operands[1]);
+      else
+	emit_insn (gen_extendqihi2 (lo, operands[1]));
+
+      x = gen_rtx_GE (VOIDmode, lo, const0_rtx);
+      emit_jump_insn (gen_cbranchhi4 (x, lo, const0_rtx, lab1));
+      
+      emit_insn (gen_addhi3 (hi, hi, constm1_rtx));
+
+      emit_label (lab1);
+    }
+  else
+    {
+      lab1 = gen_label_rtx ();
+      lab2 = gen_label_rtx ();
+
+      if (GET_MODE (operands[1]) == HImode)
+	emit_move_insn (lo, operands[1]);
+      else
+	emit_insn (gen_extendqihi2 (lo, operands[1]));
+
+      x = gen_rtx_GE (VOIDmode, lo, const0_rtx);
+      emit_jump_insn (gen_cbranchhi4 (x, lo, const0_rtx, lab1));
+
+      emit_move_insn (hi, constm1_rtx);
+      emit_jump_insn (gen_jump (lab2));
+      emit_barrier ();
+
+      emit_label (lab1);
+      emit_move_insn (hi, const0_rtx);
+
+      emit_label (lab2);
+    }
+  DONE;
+})
+
+(define_insn "*sxt_flags_in"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(unspec_volatile:HI [(const_int 0)] UNSPECV_SXT))]
+  "TARGET_40_PLUS && reload_completed"
+  "sxt %0"
+  [(set_attr "extra_word_ops" "op0")])
+
 
 ;; make float to int and vice versa
 ;; using the cc_status.flag field we could probably cut down

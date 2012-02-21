@@ -32,6 +32,12 @@ along with GCC; see the file COPYING3.  If not see
   do						\
     {						\
       builtin_define_std ("pdp11");		\
+      if (TARGET_40)				\
+	builtin_define ("__pdp11_40__");	\
+      if (TARGET_45)				\
+	builtin_define ("__pdp11_45__");	\
+      if (TARGET_FPU)				\
+	builtin_define ("__pdp11_fpu__");	\
     }						\
   while (0)
 

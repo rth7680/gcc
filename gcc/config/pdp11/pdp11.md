@@ -80,24 +80,6 @@
 ;;- cpp macro #define NOTICE_UPDATE_CC in file tm.h handles condition code
 ;;- updates for most instructions.
 
-;;- Operand classes for the register allocator:
-
-;; Compare instructions.
-
-;; currently we only support df floats, which saves us quite some
-;; hassle switching the FP mode!
-;; we assume that CPU is always in long float mode, and
-;; 16 bit integer mode - currently, the prologue for main does this,
-;; but maybe we should just set up a NEW crt0 properly,
-;; -- and what about signal handling code?
-;; (we don't even let sf floats in the register file, so
-;; we only should have to worry about truncating and widening
-;; when going to memory)
-
-;; abort() call by g++ - must define libfunc for cmp_optab
-;; and ucmp_optab for mode SImode, because we don't have that!!!
-;; - yet since no libfunc is there, we abort ()
-
 ;; The only thing that remains to be done then is output
 ;; the floats in a way the assembler can handle it (and
 ;; if you're really into it, use a PDP11 float emulation
@@ -107,22 +89,63 @@
 ;; the last thing to do is fix the UPDATE_CC macro to check
 ;; for floating point condition codes, and set cc_status
 ;; properly, also setting the CC_IN_FCCR flag.
+
 
 ;; define attributes
 ;; currently type is only fpu or arith or unknown, maybe branch later ?
 ;; default is arith
 (define_attr "type" "unknown,arith,fp" (const_string "arith"))
 
-;; length default is 2 bytes each
-(define_attr "length" "" (const_int 2))
+;; Used by the length attribute to automatically calculate adjustments
+;; to the length of an insn based on its arguments.
+(define_attr "extra_word_ops" "none,op0,op1,op2,op01,op02"
+  (const_string "none"))
+
+;; ??? Improve genattrtab to allow if_then_else as operand of plus.
+(define_attr "length" ""
+  (cond [
+	(eq_attr "extra_word_ops" "op0")
+	  (if_then_else (match_operand 0 "extra_word_operand" "")
+	    (const_int 4)
+	    (const_int 2))
+
+	(eq_attr "extra_word_ops" "op1")
+	  (if_then_else (match_operand 1 "extra_word_operand" "")
+	    (const_int 4)
+	    (const_int 2))
+
+	(eq_attr "extra_word_ops" "op2")
+	  (if_then_else (match_operand 2 "extra_word_operand" "")
+	    (const_int 4)
+	    (const_int 2))
+
+	(eq_attr "extra_word_ops" "op01")
+	  (if_then_else (match_operand 0 "extra_word_operand" "")
+	    (if_then_else (match_operand 1 "extra_word_operand" "")
+	      (const_int 6)
+	      (const_int 4))
+	    (if_then_else (match_operand 1 "extra_word_operand" "")
+	      (const_int 4)
+	      (const_int 2)))
+
+	(eq_attr "extra_word_ops" "op02")
+	  (if_then_else (match_operand 0 "extra_word_operand" "")
+	    (if_then_else (match_operand 2 "extra_word_operand" "")
+	      (const_int 6)
+	      (const_int 4))
+	    (if_then_else (match_operand 2 "extra_word_operand" "")
+	      (const_int 4)
+	      (const_int 2)))
+	]
+	(const_int 2)))
 
 ;; a user's asm statement
 (define_asm_attributes
   [(set_attr "type" "unknown")
-; length for asm is the max length per statement.  That would be
-; 3 words, for a two-operand instruction with extra word addressing
-; modes for both operands.
-   (set_attr "length" "6")])
+  ; length for asm is the max length per statement.  That would be
+  ; 3 words, for a two-operand instruction with extra word addressing
+  ; modes for both operands.
+  (set_attr "length" "6")])
 
 ;; define function units
 
@@ -177,42 +200,52 @@
 ;(define_function_unit "cpu" 1 1 (eq_attr "type" "arith") 0 0)
 ;(define_function_unit "fpu" 1 1 (eq_attr "type" "fp") 0 0)
 
+;; Compare instructions.
+
+;; currently we only support df floats, which saves us quite some
+;; hassle switching the FP mode!
+;; we assume that CPU is always in long float mode, and
+;; 16 bit integer mode - currently, the prologue for main does this,
+;; but maybe we should just set up a NEW crt0 properly,
+;; -- and what about signal handling code?
+;; (we don't even let sf floats in the register file, so
+;; we only should have to worry about truncating and widening
+;; when going to memory)
+
+;; abort() call by g++ - must define libfunc for cmp_optab
+;; and ucmp_optab for mode SImode, because we don't have that!!!
+;; - yet since no libfunc is there, we abort ()
+
+
 ;; compare
 (define_insn "*cmpdf"
   [(set (cc0)
-	(compare (match_operand:DF 0 "general_operand" "fR,fR,Q,QF")
-		 (match_operand:DF 1 "register_or_const0_operand" "G,a,G,a")))]
+	(compare (match_operand:DF 0 "general_operand" "fm,fmF")
+		 (match_operand:DF 1 "register_or_const0_operand" "G,a")))]
   "TARGET_FPU"
 {
   cc_status.flags = CC_IN_FPU;
-  if (which_alternative == 0 || which_alternative == 2)
+  if (which_alternative == 0)
     return "{tstd|tstf} %0\;cfcc";
   else
     return "{cmpd|cmpf} %0, %1\;cfcc";
 }
-  [(set_attr "length" "4,4,6,6")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "*cmp<mode>"
   [(set (cc0)
-	(compare (match_operand:I12 0 "general_operand" "rR,rR,rR,Q,Qi,Qi")
-		 (match_operand:I12 1 "general_operand" "N,rR,Qi,N,rR,Qi")))]
+	(compare (match_operand:I12 0 "general_operand" "rm,rmi")
+		 (match_operand:I12 1 "general_operand" " N,rmi")))]
   ""
   "@
    tst<isfx> %0
-   cmp<isfx> %0,%1
-   cmp<isfx> %0,%1
-   tst<isfx> %0
-   cmp<isfx> %0,%1
    cmp<isfx> %0,%1"
-  [(set_attr "length" "2,2,4,4,4,6")])
+  [(set_attr "extra_word_ops" "op0,op01")])
 
-;; sob instruction - we need an assembler which can make this instruction
-;; valid under _all_ circumstances!
-
-(define_insn ""
+(define_insn "*sob"
   [(set (pc)
 	(if_then_else
-	 (ne (plus:HI (match_operand:HI 0 "register_operand" "+r")
+	 (ne (plus:HI (match_operand:HI 0 "nonimmediate_operand" "+r,!m")
 		      (const_int -1))
 	     (const_int 0))
 	 (label_ref (match_operand 1 "" ""))
@@ -222,29 +255,30 @@
 		 (const_int -1)))]
   "TARGET_40_PLUS"
 {
-  static int labelcount = 0;
-  static char buf[1000];
-
-  if (get_attr_length (insn) == 2)
-    return "sob %0, %l1";
-
-  /* emulate sob */
-  output_asm_insn ("dec %0", operands);
-  sprintf (buf, "bge LONG_SOB%d", labelcount);
-  output_asm_insn (buf, NULL);
-  output_asm_insn ("jmp %l1", operands);
-  sprintf (buf, "LONG_SOB%d:", labelcount++);
-  output_asm_insn (buf, NULL);
-  return "";
+  switch (get_attr_length (insn))
+    {
+    case 2:
+      return "sob %0, %l1";
+    /* Emulate sob, modulo the clobbering of the flags.  */
+    case 4:
+      return "dec %0\;bne %l1";
+    case 8:
+      return "dec %0\;beq .+6\;jmp %l1";
+    default:
+      gcc_unreachable ();
+    }
 }
-  [(set (attr "length") (if_then_else (ior (lt (minus (match_dup 0)
-						       (pc))
-						(const_int MIN_SOB))
-					   (gt (minus (match_dup 0)
-						       (pc))
-						(const_int MAX_SOB)))
-				      (const_int 8)
-				      (const_int 2)))])
+  [(set (attr "length")
+	(cond [(ior (lt (minus (match_dup 1) (pc)) (const_int MIN_BRANCH))
+		    (gt (minus (match_dup 1) (pc)) (const_int MAX_BRANCH)))
+	         (const_int 8)
+	       (ior (lt (minus (match_dup 1) (pc)) (const_int MIN_SOB))
+		    (gt (minus (match_dup 1) (pc)) (const_int MAX_SOB)))
+		 (const_int 4)
+	       (match_operand 0 "memory_operand" "")
+		 (const_int 4)
+	      ]
+	      (const_int 2)))])
 
 ;; These control RTL generation for conditional jump insns
 ;; and match them for register allocation.
@@ -290,15 +324,13 @@
 {
   return output_jump (GET_CODE (operands[0]), 0, get_attr_length (insn));
 }
-  [(set (attr "length") (if_then_else (ior (lt (minus (match_dup 1)
-						      (pc))
-					       (const_int MIN_BRANCH))
-					   (gt (minus (match_dup 1)
-						      (pc))
-					       (const_int MAX_BRANCH)))
-				      (const_int 6)
-				      (const_int 2)))])
-
+  [(set (attr "length")
+	(if_then_else (ior (lt (minus (match_dup 1) (pc))
+			       (const_int MIN_BRANCH))
+			   (gt (minus (match_dup 1) (pc))
+			       (const_int MAX_BRANCH)))
+	  (const_int 6)
+	  (const_int 2)))])
 
 ;; These match inverted jump insns for register allocation.
 
@@ -312,14 +344,13 @@
 {
   return output_jump (GET_CODE (operands[0]), 1, get_attr_length (insn));
 }
-  [(set (attr "length") (if_then_else (ior (lt (minus (match_dup 1)
-						      (pc))
-					       (const_int MIN_BRANCH))
-					   (gt (minus (match_dup 1)
-						      (pc))
-					       (const_int MAX_BRANCH)))
-				      (const_int 6)
-				      (const_int 2)))])
+  [(set (attr "length")
+	(if_then_else (ior (lt (minus (match_dup 1) (pc))
+			       (const_int MIN_BRANCH))
+			   (gt (minus (match_dup 1) (pc))
+			       (const_int MAX_BRANCH)))
+	  (const_int 6)
+	  (const_int 2)))])
 
 ;; Move instructions
 
@@ -330,8 +361,7 @@
 {
   return output_move_multiple (operands);
 }
-  ;; what's the most expensive code - say twice movsi = 16
-  [(set_attr "length" "16,32")])
+  [(set_attr "length" "16,32")])		;; NEED_SPLIT
 
 (define_insn "movsi"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,g,g")
@@ -340,20 +370,16 @@
 {
   return output_move_multiple (operands);
 }
-  ;; what's the most expensive code ? - I think 8!
-  ;; we could split it up and make several sub-cases...
-  [(set_attr "length" "4,6,8,16")])
+  [(set_attr "length" "4,6,8,16")])		;; NEED_SPLIT
 
 (define_insn "mov<mode>"
-  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(match_operand:I12 1 "general_operand" "rRN,Qi,rRN,Qi"))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm,rm")
+	(match_operand:I12 1 "general_operand"      "  N, g"))]
   ""
-{
-  if (operands[1] == const0_rtx)
-    return "clr<isfx> %0";
-  return "mov<isfx> %1, %0";
-}
-  [(set_attr "length" "2,4,4,6")])
+  "@
+   clr<isfx> %0
+   mov<isfx> %1, %0"
+  [(set_attr "extra_word_ops" "op0,op01")])
 
 (define_insn "movdf"
   [(set (match_operand:DF 0 "float_nonimm_operand" "=a,fR,a,Q,g")
@@ -371,7 +397,7 @@
     }
 }
   ;; last one is worst-case
-  [(set_attr "length" "2,2,4,4,24")])
+  [(set_attr "length" "2,2,4,4,24")])		;; NEED_SPLIT
 
 (define_insn "movsf"
   [(set (match_operand:SF 0 "float_nonimm_operand" "=a,fR,a,Q,g")
@@ -389,7 +415,7 @@
     }
 }
   ;; last one is worst-case
-  [(set_attr "length" "2,2,4,4,12")])
+  [(set_attr "length" "2,2,4,4,12")])		;; NEED_SPLIT
 
 ;; maybe fiddle a bit with move_ratio, then
 ;; let constraints only accept a register ...
@@ -403,7 +429,7 @@
 	      (clobber (match_dup 5))
 	      (clobber (match_dup 6))
 	      (clobber (match_dup 2))])]
-  "(TARGET_BCOPY_BUILTIN)"
+  "TARGET_BCOPY_BUILTIN"
 {
   operands[0]
     = replace_equiv_address (operands[0],
@@ -426,7 +452,7 @@
    (clobber (match_dup 0))
    (clobber (match_dup 1))
    (clobber (match_dup 2))]
-  "(TARGET_BCOPY_BUILTIN)"
+  "TARGET_BCOPY_BUILTIN"
 {
   return output_block_move (operands);
 }
@@ -436,59 +462,48 @@
 ;;- truncation instructions
 
 (define_insn  "truncdfsf2"
-  [(set (match_operand:SF 0 "float_nonimm_operand" "=f,R,Q")
-	(float_truncate:SF (match_operand:DF 1 "register_operand" "f,a,a")))]
+  [(set (match_operand:SF 0 "float_nonimm_operand" "=f,m")
+	(float_truncate:SF
+	  (match_operand:DF 1 "register_operand"   " f,a")))]
   "TARGET_FPU"
   "@
    /* nothing */
-   {stcdf|movfo} %1, %0
    {stcdf|movfo} %1, %0"
-  [(set_attr "length" "0,2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;;- sign extension instructions
 
 (define_insn "extendsfdf2"
-  [(set (match_operand:DF 0 "register_operand" "=f,a,a")
-	(float_extend:DF (match_operand:SF 1 "float_operand" "f,R,Q")))]
+  [(set (match_operand:DF 0 "register_operand" "=f,a")
+	(float_extend:DF
+	  (match_operand:SF 1 "float_operand"  " f,m")))]
   "TARGET_FPU"
   "@
    /* nothing */
-   {ldcfd|movof} %1, %0
    {ldcfd|movof} %1, %0"
-  [(set_attr "length" "0,2,4")])
+  [(set_attr "extra_word_ops" "op1")])
 
-;; does movb sign extend in register-to-register move?
 (define_insn "extendqihi2"
-  [(set (match_operand:HI 0 "register_operand" "=r,r")
-	(sign_extend:HI (match_operand:QI 1 "general_operand" "rR,Q")))]
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(sign_extend:HI (match_operand:QI 1 "general_operand" "g")))]
   ""
   "movb %1, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op1")])
 
 (define_insn "extendqisi2"
-  [(set (match_operand:SI 0 "register_operand" "=r,r")
-	(sign_extend:SI (match_operand:QI 1 "general_operand" "rR,Q")))]
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(sign_extend:SI (match_operand:QI 1 "general_operand" "g")))]
   "TARGET_40_PLUS"
 {
-  rtx latehalf[2];
-
-  /* make register pair available */
-  latehalf[0] = operands[0];
-  operands[0] = gen_rtx_REG (HImode, REGNO (operands[0])+ 1);
-
-  output_asm_insn("movb %1, %0", operands);
-  output_asm_insn("sxt %0", latehalf);
-  return "";
+  operands[2] = gen_lowpart (HImode, operands[0]);
+  operands[0] = gen_highpart (HImode, operands[0]);
+  return "movb %1, %2\;sxt %0";
 }
-  [(set_attr "length" "4,6")])
-
-;; maybe we have to use define_expand to say that we have the instruction,
-;; unconditionally, and then match dependent on CPU type:
+  [(set_attr "extra_word_ops" "op1")])
 
 (define_expand "extendhisi2"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=g")
-	(sign_extend:SI (match_operand:HI 1 "general_operand" "g")))]
-  ""
+  [(set (match_operand:SI 0 "nonimmediate_operand" "")
+	(sign_extend:SI (match_operand:HI 1 "general_operand" "")))]
   "")
 
 (define_insn "*extendhisi2_40p"
@@ -528,7 +543,7 @@
       gcc_unreachable ();
     }
 }
-  [(set_attr "length" "10,6,6")])
+  [(set_attr "length" "10,6,6")])		;; NEED_SPLIT
 
 
 (define_insn ""
@@ -559,7 +574,7 @@
 
   return "";
 }
-  [(set_attr "length" "12")])
+  [(set_attr "length" "12")])			;; NEED_SPLIT
 
 ;; make float to int and vice versa
 ;; using the cc_status.flag field we could probably cut down
@@ -568,8 +583,8 @@
 ;; what do pdp library routines do to fpu mode ?
 
 (define_insn "floatsidf2"
-  [(set (match_operand:DF 0 "register_operand" "=a,a,a")
-	(float:DF (match_operand:SI 1 "general_operand" "r,R,Q")))]
+  [(set (match_operand:DF 0 "register_operand" "=a,a")
+	(float:DF (match_operand:SI 1 "general_operand" "r,m")))]
   "TARGET_FPU"
 {
   if (which_alternative == 0)
@@ -586,24 +601,22 @@
       output_asm_insn ("seti", operands);
       return "";
     }
-  else if (which_alternative == 1)
-    return "setl\;{ldcld|movif} %1, %0\;seti";
   else
     return "setl\;{ldcld|movif} %1, %0\;seti";
 }
-  [(set_attr "length" "10,6,8")])
+  [(set_attr "length" "10,*")			;; NEED_SPLIT
+   (set_attr "extra_word_ops" "*,op1")])
 
 (define_insn "floathidf2"
-  [(set (match_operand:DF 0 "register_operand" "=a,a")
-	(float:DF (match_operand:HI 1 "general_operand" "rR,Qi")))]
+  [(set (match_operand:DF 0 "register_operand" "=a")
+	(float:DF (match_operand:HI 1 "general_operand" "g")))]
   "TARGET_FPU"
   "{ldcid|movif} %1, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op1")])
 
-;; cut float to int
 (define_insn "fix_truncdfsi2"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,R,Q")
-	(fix:SI (fix:DF (match_operand:DF 1 "register_operand" "a,a,a"))))]
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,m")
+	(fix:SI (fix:DF (match_operand:DF 1 "register_operand" "a,a"))))]
   "TARGET_FPU"
 {
   if (which_alternative ==0)
@@ -616,31 +629,30 @@
       output_asm_insn ("mov (sp)+, %0", operands);
       return "";
     }
-  else if (which_alternative == 1)
-    return "setl\;{stcdl|movfi} %1, %0\;seti";
   else
     return "setl\;{stcdl|movfi} %1, %0\;seti";
 }
-  [(set_attr "length" "10,6,8")])
+  [(set_attr "length" "10,*")			;; NEED_SPLIT
+   (set_attr "extra_word_ops" "*,op0")])
 
 (define_insn "fix_truncdfhi2"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(fix:HI (fix:DF (match_operand:DF 1 "register_operand" "a,a"))))]
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(fix:HI (fix:DF (match_operand:DF 1 "register_operand" "a"))))]
   "TARGET_FPU"
   "{stcdi|movfi} %1, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 
 ;;- arithmetic instructions
 ;;- add instructions
 
 (define_insn "adddf3"
-  [(set (match_operand:DF 0 "register_operand" "=a,a")
-	(plus:DF (match_operand:DF 1 "register_operand" "%0,0")
-		 (match_operand:DF 2 "general_operand" "fR,QF")))]
+  [(set (match_operand:DF 0 "register_operand" "=a")
+	(plus:DF (match_operand:DF 1 "register_operand" "%0")
+		 (match_operand:DF 2 "general_operand" "fmF")))]
   "TARGET_FPU"
   "{addd|addf} %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 (define_insn_and_split "add<mode>3"
   [(set (match_operand:I48 0 "nonimmediate_operand" "=&ro")
@@ -672,9 +684,9 @@
 })
 
 (define_insn "addhi3"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(plus:HI (match_operand:HI 1 "general_operand" "%0,0,0,0")
-		 (match_operand:HI 2 "general_operand" "rRLM,Qi,rRLM,Qi")))]
+  [(set (match_operand:HI 0 "nonimmediate_operand"    "=rm,rm")
+	(plus:HI (match_operand:HI 1 "general_operand" "%0,0")
+		 (match_operand:HI 2 "general_operand" "LM,g")))]
   ""
 {
   if (GET_CODE (operands[2]) == CONST_INT)
@@ -687,7 +699,7 @@
 
   return "add %2, %0";
 }
-  [(set_attr "length" "2,4,4,6")])
+  [(set_attr "extra_word_ops" "op0,op02")])
 
 ;; Insns for add-with-carry-out and add-with-carry-in.
 ;; This should use a flags register, but until everything clobbers the
@@ -695,21 +707,21 @@
 
 ;; Note that INC/DEC do not set the carry flag.
 (define_insn "addhi_carry_out"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,rR,Q,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI
 	  [(match_dup 0)
-	   (match_operand:HI 1 "general_operand" "rR,Qi,rR,Qi")]
+	   (match_operand:HI 1 "general_operand" "g")]
 	  UNSPECV_ADD))]
   "reload_completed"
   "add %1, %0"
-  [(set_attr "length" "2,4,4,6")])
+  [(set_attr "extra_word_ops" "op01")])
 
 (define_insn "addhi_carry_in"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ADC))]
   "reload_completed"
   "adc %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;;- subtract instructions
 ;; we don't have to care for constant second
@@ -717,12 +729,12 @@
 ;; also for minus:DF ??
 
 (define_insn "subdf3"
-  [(set (match_operand:DF 0 "register_operand" "=a,a")
-	(minus:DF (match_operand:DF 1 "register_operand" "0,0")
-		  (match_operand:DF 2 "general_operand" "fR,Q")))]
+  [(set (match_operand:DF 0 "register_operand" "=a")
+	(minus:DF (match_operand:DF 1 "register_operand" "0")
+		  (match_operand:DF 2 "general_operand" "fm")))]
   "TARGET_FPU"
   "{subd|subf} %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 (define_insn_and_split "sub<mode>3"
   [(set (match_operand:I48 0 "nonimmediate_operand" "=&ro")
@@ -752,32 +764,29 @@
 })
 
 (define_insn "subhi3"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(minus:HI (match_operand:HI 1 "general_operand" "0,0,0,0")
-		  (match_operand:HI 2 "general_operand" "rR,Qi,rR,Qi")))]
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(minus:HI (match_operand:HI 1 "general_operand" "0")
+		  (match_operand:HI 2 "general_operand" "g")))]
   ""
-{
-  gcc_assert (GET_CODE (operands[2]) != CONST_INT);
-  return "sub %2, %0";
-}
-  [(set_attr "length" "2,4,4,6")])
+  "sub %2, %0"
+  [(set_attr "extra_word_ops" "op02")])
 
 (define_insn "subhi_carry_out"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,rR,Q,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI
 	  [(match_dup 0)
-	   (match_operand:HI 1 "general_operand" "rR,Qi,rR,Qi")]
+	   (match_operand:HI 1 "general_operand" "g")]
 	  UNSPECV_SUB))]
   "reload_completed"
   "sub %1, %0"
-  [(set_attr "length" "2,4,4,6")])
+  [(set_attr "extra_word_ops" "op01")])
 
 (define_insn "subhi_carry_in"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_SBC))]
   "reload_completed"
   "sbc %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 
 ;;;;- and instructions
@@ -809,40 +818,40 @@
 })
 
 (define_insn "bic<mode>3"
-  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
 	(and:I12
-	  (not:I12 (match_operand:I12 2 "general_operand" "rR,Qi,rR,Qi"))
-	  (match_operand:I12 1 "general_operand" "0,0,0,0")))]
+	  (not:I12 (match_operand:I12 2 "general_operand" "g"))
+	  (match_operand:I12 1 "general_operand" "0")))]
   ""
   "bic<isfx> %2, %0"
-  [(set_attr "length" "2,4,4,6")])
+  [(set_attr "extra_word_ops" "op02")])
 
 ;;- Bit set (inclusive or) instructions
 (define_insn "ior<mode>3"
-  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,rR,Q,Q")
-	(ior:I12 (match_operand:I12 1 "general_operand" "%0,0,0,0")
-		(match_operand:I12 2 "general_operand" "rR,Qi,rR,Qi")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
+	(ior:I12 (match_operand:I12 1 "general_operand" "%0")
+		 (match_operand:I12 2 "general_operand" "g")))]
   ""
   "bis<isfx> %2, %0"
-  [(set_attr "length" "2,4,4,6")])
+  [(set_attr "extra_word_ops" "op02")])
 
 ;;- xor instructions
 (define_insn "xorhi3"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(xor:HI (match_operand:HI 1 "general_operand" "%0,0")
-		(match_operand:HI 2 "register_operand" "r,r")))]
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(xor:HI (match_operand:HI 1 "general_operand" "%0")
+		(match_operand:HI 2 "register_operand" "r")))]
   "TARGET_40_PLUS"
   "xor %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;;- one complement instructions
 
 (define_insn "one_cmpl<mode>2"
-  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,Q")
-        (not:I12 (match_operand:I12 1 "general_operand" "0,0")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
+        (not:I12 (match_operand:I12 1 "general_operand" "0")))]
   ""
   "com<isfx> %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 
 ;;- arithmetic shift instructions
@@ -866,28 +875,28 @@
 })
 
 (define_insn "*aslhi3_one"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(ashift:HI (match_operand:HI 1 "nonimmediate_operand" "0,0")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(ashift:HI (match_operand:HI 1 "nonimmediate_operand" "0")
 		   (const_int 1)))]
   ""
   "asl %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "*asrhi3_one"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rR,Q")
-	(ashift:HI (match_operand:HI 1 "general_operand" "0,0")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(ashift:HI (match_operand:HI 1 "general_operand" "0")
 		   (const_int -1)))]
   ""
   "asr %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "*ashlhi3_40p"
-  [(set (match_operand:HI 0 "register_operand" "=r,r")
-	(ashift:HI (match_operand:HI 1 "register_operand" "0,0")
-		   (match_operand:HI 2 "general_operand" "rR,Qi")))]
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(ashift:HI (match_operand:HI 1 "register_operand" "0")
+		   (match_operand:HI 2 "general_operand" "g")))]
   "TARGET_40_PLUS"
   "ash %2,%0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 (define_insn_and_split "*ashlhi3_small"
   [(set (match_operand:HI 0 "register_operand" "=r")
@@ -975,12 +984,12 @@
 })
 
 (define_insn "ashlsi3"
-  [(set (match_operand:SI 0 "register_operand" "=r,r")
-	(ashift:SI (match_operand:SI 1 "register_operand" "0,0")
-		   (match_operand:HI 2 "general_operand" "rR,Qi")))]
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ashift:SI (match_operand:SI 1 "register_operand" "0")
+		   (match_operand:HI 2 "general_operand" "g")))]
   "TARGET_40_PLUS"
   "ashc %2,%0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 (define_expand "ashrsi3"
   [(set (match_operand:SI 0 "register_operand" "")
@@ -1050,51 +1059,51 @@
   "clc")
 
 (define_insn "aslhi_carry_out"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ASL))]
   "reload_completed"
   "asl %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "asrhi_carry_out"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ASR))]
   ""
   "asr %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "rorhi_carry_in"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ROR))]
   "reload_completed"
   "ror %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "rolhi_carry_in"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_ROL))]
   "reload_completed"
   "rol %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;; absolute
 
 (define_insn "absdf2"
-  [(set (match_operand:DF 0 "nonimmediate_operand" "=fR,Q")
-	(abs:DF (match_operand:DF 1 "general_operand" "0,0")))]
+  [(set (match_operand:DF 0 "nonimmediate_operand" "=fm")
+	(abs:DF (match_operand:DF 1 "general_operand" "0")))]
   "TARGET_FPU"
   "{absd|absf} %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 
 ;; negate insns
 
 (define_insn "negdf2"
-  [(set (match_operand:DF 0 "float_nonimm_operand" "=fR,Q")
-	(neg:DF (match_operand:DF 1 "register_operand" "0,0")))]
+  [(set (match_operand:DF 0 "float_nonimm_operand" "=fm")
+	(neg:DF (match_operand:DF 1 "register_operand" "0")))]
   "TARGET_FPU"
   "{negd|negf} %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn_and_split "neg<mode>2"
   [(set (match_operand:I48 0 "nonimmediate_operand" "=r<o")
@@ -1119,18 +1128,18 @@
 })
 
 (define_insn "neg<mode>2"
-  [(set (match_operand:I12 0 "nonimmediate_operand" "=rR,Q")
-	(neg:I12 (match_operand:I12 1 "general_operand" "0,0")))]
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
+	(neg:I12 (match_operand:I12 1 "general_operand" "0")))]
   ""
   "neg<isfx> %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "neghi_carry_out"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "+rR,Q")
+  [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
 	(unspec_volatile:HI [(match_dup 0)] UNSPECV_NEG))]
   "reload_completed"
   "neg %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;; Unconditional and other jump instructions
 (define_insn "jump"
@@ -1160,14 +1169,13 @@
   [(set_attr "length" "4")])
 
 (define_insn "tablejump"
-  [(set (pc) (match_operand:HI 0 "general_operand" "r,R,Q"))
+  [(set (pc) (match_operand:HI 0 "general_operand" "r,m"))
    (use (label_ref (match_operand 1 "" "")))]
   ""
   "@
   jmp (%0)
-  jmp %@%0
   jmp %@%0"
-  [(set_attr "length" "2,2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;; indirect jump - let's be conservative!
 ;; allow only register_operand, even though we could also
@@ -1181,22 +1189,20 @@
 ;;- jump to subroutine
 
 (define_insn "call"
-  [(call (match_operand:HI 0 "general_operand" "rR,Q")
-	 (match_operand:HI 1 "general_operand" "g,g"))]
-  ;;- Don't use operand 1 for most machines.
+  [(call (match_operand:HI 0 "general_operand" "g")
+	 (match_operand:HI 1 "" ""))]
   ""
   "jsr pc, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op0")])
 
 ;;- jump to subroutine
 (define_insn "call_value"
   [(set (match_operand 0 "" "")
-	(call (match_operand:HI 1 "general_operand" "rR,Q")
-	      (match_operand:HI 2 "general_operand" "g,g")))]
-  ;;- Don't use operand 2 for most machines.
+	(call (match_operand:HI 1 "general_operand" "m")
+	      (match_operand:HI 2 "" "")))]
   ""
   "jsr pc, %1"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op1")])
 
 ;;- nop instruction
 (define_insn "nop"
@@ -1208,24 +1214,24 @@
 ;;- multiply
 
 (define_insn "muldf3"
-  [(set (match_operand:DF 0 "register_operand" "=a,a")
-	(mult:DF (match_operand:DF 1 "register_operand" "%0,0")
-		 (match_operand:DF 2 "float_operand" "fR,QF")))]
+  [(set (match_operand:DF 0 "register_operand" "=a")
+	(mult:DF (match_operand:DF 1 "register_operand" "%0")
+		 (match_operand:DF 2 "float_operand" "fmF")))]
   "TARGET_FPU"
   "{muld|mulf} %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 ;; 16 bit result multiply.
 ;; We force the use of odd numbered registers, so that we don't need
 ;; extra clobbers.
 
 (define_insn "mulhi3"
-  [(set (match_operand:HI 0 "register_operand" "=d,d")
-	(mult:HI (match_operand:HI 1 "register_operand" "%0,0")
-		 (match_operand:HI 2 "general_operand" "rR,Qi")))]
+  [(set (match_operand:HI 0 "register_operand" "=d")
+	(mult:HI (match_operand:HI 1 "register_operand" "%0")
+		 (match_operand:HI 2 "general_operand" "g")))]
   "TARGET_40_PLUS"
   "mul %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 ;; 32 bit result multiply.
 ;; Getting the registers matched up is tricky.  If we use matching
@@ -1282,17 +1288,18 @@
       operands[1] = dhi;
       operands[2] = dlo;
     }
-})
+}
+  [(set_attr "extra_word_ops" "op2")])
 
 
 ;;- divide
 (define_insn "divdf3"
-  [(set (match_operand:DF 0 "register_operand" "=a,a")
-	(div:DF (match_operand:DF 1 "register_operand" "0,0")
-		(match_operand:DF 2 "general_operand" "fR,QF")))]
+  [(set (match_operand:DF 0 "register_operand" "=a")
+	(div:DF (match_operand:DF 1 "register_operand" "0")
+		(match_operand:DF 2 "general_operand" "fmF")))]
   "TARGET_FPU"
   "{divd|divf} %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 (define_expand "divmodhi4"
   [(match_operand:HI 0 "register_operand" "")		; quotient
@@ -1323,12 +1330,12 @@
 ;; not affected.
 
 (define_insn "divmodhi4_internal"
-  [(set (match_operand:SI 0 "register_operand" "=r,r")
-        (unspec:SI [(match_operand:SI 1 "register_operand" "0,0")
-		    (match_operand:HI 2 "general_operand" "rR,Qi")]
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (unspec:SI [(match_operand:SI 1 "register_operand" "0")
+		    (match_operand:HI 2 "general_operand" "g")]
 		   UNSPEC_DIVMOD))]
   "TARGET_40_PLUS"
   "div %2, %0"
-  [(set_attr "length" "2,4")])
+  [(set_attr "extra_word_ops" "op2")])
 
 ;; is rotate doing the right thing to be included here ????

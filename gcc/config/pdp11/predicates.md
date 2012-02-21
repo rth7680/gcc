@@ -52,3 +52,10 @@
 		 (match_test "REGNO_REG_CLASS (REGNO (op)) == LOAD_FPU_REGS")
 		 (match_test "REGNO_REG_CLASS (REGNO (op)) == NO_LOAD_FPU_REGS"))
 		(match_operand 0 "nonimmediate_operand")))
+
+;; Return true for any operand that would require an extra word.
+;; This includes constants and memories including constants.
+(define_predicate "extra_word_operand"
+  (ior (match_code "const_int,const_double,const,symbol_ref,label_ref")
+       (and (match_code "mem")
+	    (match_code "plus" "0"))))

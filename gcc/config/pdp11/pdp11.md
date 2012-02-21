@@ -1121,6 +1121,39 @@
   DONE;
 })
 
+(define_insn_and_split "*rothi_1"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=ro")
+	(rotate:HI (match_operand:HI 1 "nonimmediate_operand" "0")
+		   (const_int 1)))]
+  ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
+{
+  emit_insn (gen_aslhi_carry_out (operands[0]));
+  emit_insn (gen_addhi_carry_in (operands[0]));
+  DONE;
+})
+
+(define_insn "bswaphi2"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(rotate:HI (match_operand:HI 1 "nonimmediate_operand" "0")
+		   (const_int 8)))]
+  ""
+  "swab %0"
+  [(set_attr "extra_word_ops" "op0")])
+
+(define_insn_and_split "*rothi_9"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(rotate:HI (match_operand:HI 1 "nonimmediate_operand" "0")
+		   (const_int 9)))]
+  ""
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 0) (rotate:HI (match_dup 0) (const_int 8)))
+   (set (match_dup 0) (rotate:HI (match_dup 0) (const_int 1)))]
+  "")
+
 (define_insn "clear_carry_out"
   [(unspec_volatile [(const_int 0)] UNSPECV_CLC)]
   "reload_completed"
@@ -1405,5 +1438,3 @@
   "TARGET_40_PLUS"
   "div %2, %0"
   [(set_attr "extra_word_ops" "op2")])
-
-;; is rotate doing the right thing to be included here ????

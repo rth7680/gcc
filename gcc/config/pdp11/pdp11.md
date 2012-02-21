@@ -632,28 +632,30 @@
 
 (define_insn "floatsidf2"
   [(set (match_operand:DF 0 "register_operand" "=a,a")
-	(float:DF (match_operand:SI 1 "general_operand" "r,m")))]
+	(float:DF (match_operand:SI 1 "nonimmediate_operand" "r,m")))]
   "TARGET_FPU"
+  "@
+   #
+   setl\;{ldcld|movif} %1, %0\;seti"
+  [(set (attr "length")
+	(if_then_else (match_operand 1 "extra_word_operand")
+	  (const_int 8)
+	  (const_int 6)))])
+
+(define_split
+  [(set (match_operand:DF 0 "register_operand")
+	(float:DF (match_operand:SI 1 "register_operand" )))]
+  "TARGET_FPU && reload_completed"
+  [(set (match_dup 0) (float:DF (match_dup 1)))]
 {
-  if (which_alternative == 0)
-    {
-      rtx latehalf[2];
+  rtx x;
+  x = gen_rtx_PRE_DEC (HImode, stack_pointer_rtx);
+  x = gen_rtx_MEM (SImode, x);
+  emit_move_insn (x, operands[1]);
 
-      latehalf[0] = NULL;
-      latehalf[1] = gen_rtx_REG (HImode, REGNO (operands[1]) + 1);
-      output_asm_insn ("mov %1, -(sp)", latehalf);
-      output_asm_insn ("mov %1, -(sp)", operands);
-
-      output_asm_insn ("setl", operands);
-      output_asm_insn ("{ldcld|movif} (sp)+, %0", operands);
-      output_asm_insn ("seti", operands);
-      return "";
-    }
-  else
-    return "setl\;{ldcld|movif} %1, %0\;seti";
-}
-  [(set_attr "length" "10,*")			;; NEED_SPLIT
-   (set_attr "extra_word_ops" "*,op1")])
+  x = gen_rtx_POST_INC (HImode, stack_pointer_rtx);
+  operands[1] = gen_rtx_MEM (SImode, x);
+})
 
 (define_insn "floathidf2"
   [(set (match_operand:DF 0 "register_operand" "=a")
@@ -664,28 +666,34 @@
 
 (define_insn "fix_truncdfsi2"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,m")
-	(fix:SI (fix:DF (match_operand:DF 1 "register_operand" "a,a"))))]
+	(fix:SI (match_operand:DF 1 "register_operand" "a,a")))]
   "TARGET_FPU"
+  "@
+   #
+   setl\;{stcdl|movfi} %1, %0\;seti"
+  [(set (attr "length")
+	(if_then_else (match_operand 0 "extra_word_operand")
+	  (const_int 8)
+	  (const_int 6)))])
+
+(define_split
+  [(set (match_operand:SI 0 "register_operand")
+	(fix:SI (match_operand:DF 1 "register_operand" )))]
+  "TARGET_FPU && reload_completed"
+  [(set (match_dup 2) (fix:SI (match_dup 1)))
+   (set (match_dup 0) (match_dup 3))]
 {
-  if (which_alternative ==0)
-    {
-      output_asm_insn ("setl", operands);
-      output_asm_insn ("{stcdl|movfi} %1, -(sp)", operands);
-      output_asm_insn ("seti", operands);
-      output_asm_insn ("mov (sp)+, %0", operands);
-      operands[0] = gen_rtx_REG (HImode, REGNO (operands[0]) + 1);
-      output_asm_insn ("mov (sp)+, %0", operands);
-      return "";
-    }
-  else
-    return "setl\;{stcdl|movfi} %1, %0\;seti";
-}
-  [(set_attr "length" "10,*")			;; NEED_SPLIT
-   (set_attr "extra_word_ops" "*,op0")])
+  rtx x;
+  x = gen_rtx_PRE_DEC (HImode, stack_pointer_rtx);
+  operands[2] = gen_rtx_MEM (SImode, x);
+
+  x = gen_rtx_POST_INC (HImode, stack_pointer_rtx);
+  operands[3] = gen_rtx_MEM (SImode, x);
+})
 
 (define_insn "fix_truncdfhi2"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
-	(fix:HI (fix:DF (match_operand:DF 1 "register_operand" "a"))))]
+	(fix:HI (match_operand:DF 1 "register_operand" "a")))]
   "TARGET_FPU"
   "{stcdi|movfi} %1, %0"
   [(set_attr "extra_word_ops" "op0")])

@@ -1140,164 +1140,131 @@ simple_memory_operand(rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
  * operands[4]  ... scratch register
  */
 
- 
-const char *
-output_block_move(rtx *operands)
+static void
+emit_postinc_copy (enum machine_mode mode, rtx d_addr, rtx s_addr)
 {
-    static int count = 0;
-    char buf[200];
-    int unroll;
-    int lastbyte = 0;
-    
-    /* Move of zero bytes is a NOP.  */
-    if (operands[2] == const0_rtx)
-      return "";
-    
-    /* Look for moves by small constant byte counts, those we'll
-       expand to straight line code.  */
-    if (CONSTANT_P (operands[2]))
+  emit_move_insn (gen_rtx_MEM (mode, gen_rtx_POST_INC (HImode, d_addr)),
+		  gen_rtx_MEM (mode, gen_rtx_POST_INC (HImode, s_addr)));
+}
+
+void
+split_block_move (rtx *operands)
+{
+  rtx d_addr = operands[0];
+  rtx s_addr = operands[1];
+  rtx r_len = operands[2];
+  rtx r_align = operands[3];
+  rtx scratch = operands[4];
+  int unroll = 0, lastbyte = 0, i;
+  int align = INTVAL (r_align);
+  rtx x, over = NULL, loop;
+
+  if (CONST_INT_P (r_len))
     {
-	if (INTVAL (operands[2]) < 16
-	    && (!optimize_size || INTVAL (operands[2]) < 5)
-	    && INTVAL (operands[3]) == 1)
-	{
-	    register int i;
-	    
-	    for (i = 1; i <= INTVAL (operands[2]); i++)
-		output_asm_insn("movb (%1)+, (%0)+", operands);
+      int len = INTVAL (r_len);
 
-	    return "";
+      if (len == 0)
+	{
+	  /* Zero-length move is a no-op.  */
+	  emit_note (NOTE_INSN_DELETED);
+	  return;
 	}
-	else if (INTVAL(operands[2]) < 32
-		 && (!optimize_size || INTVAL (operands[2]) < 9)
-		 && INTVAL (operands[3]) >= 2)
+
+      if (align >= 2 && len < (optimize_function_for_size_p (cfun) ? 9 : 32))
 	{
-	    register int i;
-	    
-	    for (i = 1; i <= INTVAL (operands[2]) / 2; i++)
-		output_asm_insn ("mov (%1)+, (%0)+", operands);
-	    if (INTVAL (operands[2]) & 1)
-	      output_asm_insn ("movb (%1), (%0)", operands);
-	    
-	    return "";
+	  for (i = 0; i < len; i += 2)
+	    emit_postinc_copy (HImode, d_addr, s_addr);
+	  len &= 1;
 	}
-    }
-
-    /* Ideally we'd look for moves that are multiples of 4 or 8
-       bytes and handle those by unrolling the move loop.  That
-       makes for a lot of code if done at run time, but it's ok
-       for constant counts.  Also, for variable counts we have
-       to worry about odd byte count with even aligned pointers.
-       On 11/40 and up we handle that case; on older machines
-       we don't and just use byte-wise moves all the time.  */
-
-    if (CONSTANT_P (operands[2]) )
-    {
-      if (INTVAL (operands[3]) < 2)
-	unroll = 0;
-      else
+      if (len < (optimize_function_for_size_p (cfun) ? 5 : 16))
 	{
-	  lastbyte = INTVAL (operands[2]) & 1;
+	  for (i = 0; i < len; i++)
+	    emit_postinc_copy (QImode, d_addr, s_addr);
+	  return;
+	}
 
-	  if (optimize_size || INTVAL (operands[2]) & 2)
+      /* Ideally we'd look for moves that are multiples of 4 or 8
+	 bytes and handle those by unrolling the move loop.  That
+	 makes for a lot of code if done at run time, but it's ok
+	 for constant counts.  Also, for variable counts we have
+	 to worry about odd byte count with even aligned pointers.
+	 On 11/40 and up we handle that case; on older machines
+	 we don't and just use byte-wise moves all the time.  */
+      if (align >= 2)
+	{
+	  lastbyte = len & 1;
+
+	  if ((len & 2) || optimize_function_for_size_p (cfun))
 	    unroll = 1;
-	  else if (INTVAL (operands[2]) & 4)
+	  else if (len & 4)
 	    unroll = 2;
 	  else
 	    unroll = 3;
 	}
       
       /* Loop count is byte count scaled by unroll.  */
-      operands[2] = GEN_INT (INTVAL (operands[2]) >> unroll);
-      output_asm_insn ("mov %2, %4", operands);
+      emit_move_insn (scratch, GEN_INT (len >> unroll));
     }
-    else
+  else
     {
-	/* Variable byte count; use the input register
-	   as the scratch.  */
-	operands[4] = operands[2];
+      /* Variable byte count; use the input register as the scratch.  */
+      scratch = r_len;
 
-	/* Decide whether to move by words, and check
-	   the byte count for zero.  */
-	if (TARGET_40_PLUS && INTVAL (operands[3]) > 1)
-	  {
-	    unroll = 1;
-	    output_asm_insn ("asr %4", operands);
-	  }
-	else
-	  {
-	    unroll = 0;
-	    output_asm_insn ("tst %4", operands);
-	  }
-	sprintf (buf, "beq movestrhi%d", count + 1);
-	output_asm_insn (buf, NULL);
+      /* Decide whether to move by words, and check the byte count for zero. */
+      if (TARGET_40_PLUS && align > 1)
+	{
+	  unroll = 1;
+	  lastbyte = -1;
+	  emit_insn (gen_asrhi_carry_out (scratch));
+	}
+
+      over = gen_label_rtx ();
+      x = gen_rtx_EQ (VOIDmode, scratch, const0_rtx);
+      emit_jump_insn (gen_cbranchhi4 (x, scratch, const0_rtx, over));
     }
 
-    /* Output the loop label.  */
-    sprintf (buf, "\nmovestrhi%d:", count);
-    output_asm_insn (buf, NULL);
+  loop = gen_label_rtx ();
+  emit_label (loop);
 
-    /* Output the appropriate move instructions.  */
-    switch (unroll)
+  /* Output the appropriate move instructions.  */
+  if (unroll == 0)
+    emit_postinc_copy (QImode, d_addr, s_addr);
+  else
+    for (i = 0; i < (1 << unroll); i += 2)
+      emit_postinc_copy (HImode, d_addr, s_addr);
+
+  /* Output the decrement and test.  */
+  if (TARGET_40_PLUS)
+    emit_jump_insn (gen_sob (scratch, loop));
+  else
     {
-      case 0:
-	output_asm_insn ("movb (%1)+, (%0)+", operands);
-	break;
-	
-      case 1:
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	break;
-	
-      case 2:
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	break;
-	
-      default:
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	output_asm_insn ("mov (%1)+, (%0)+", operands);
-	break;
+      emit_insn (gen_addhi3 (scratch, scratch, constm1_rtx));
+
+      x = gen_rtx_NE (VOIDmode, scratch, const0_rtx);
+      emit_jump_insn (gen_cbranchhi4 (x, scratch, const0_rtx, loop));
     }
 
-    /* Output the decrement and test.  */
-    if (TARGET_40_PLUS)
-      {
-	sprintf (buf, "sob %%4, movestrhi%d", count);
-	output_asm_insn (buf, operands);
-      }
-    else
-      {
-	output_asm_insn ("dec %4", operands);
-	sprintf (buf, "bgt movestrhi%d", count);
-	output_asm_insn (buf, NULL);
-      }
-    count ++;
+  /* If odd byte count, move the last byte.  */
+  if (lastbyte > 0)
+    emit_postinc_copy (QImode, d_addr, s_addr);
+  else if (lastbyte < 0)
+    {
+      emit_label (over);
+      over = gen_label_rtx ();
 
-    /* If constant odd byte count, move the last byte.  */
-    if (lastbyte)
-      output_asm_insn ("movb (%1), (%0)", operands);
-    else if (!CONSTANT_P (operands[2]))
-      {
-	/* Output the destination label for the zero byte count check.  */
-	sprintf (buf, "\nmovestrhi%d:", count);
-	output_asm_insn (buf, NULL);
-	count++;
-    
-	/* If we did word moves, check for trailing last byte. */
-	if (unroll)
-	  {
-	    sprintf (buf, "bcc movestrhi%d", count);
-	    output_asm_insn (buf, NULL);
-	    output_asm_insn ("movb (%1), (%0)", operands);
-	    sprintf (buf, "\nmovestrhi%d:", count);
-	    output_asm_insn (buf, NULL);
-	    count++;
-	  }
-      }
-	     
-    return "";
+      /* Skip the byte copy if carry is clear.  Note that carry is
+	 unchanged from the initial ASR insn.  */
+      x = gen_rtx_GEU (VOIDmode, cc0_rtx, const0_rtx);
+      x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
+				gen_rtx_LABEL_REF (VOIDmode, over), pc_rtx);
+      x = gen_rtx_SET (VOIDmode, pc_rtx, x);
+      emit_jump_insn (x);
+
+      emit_postinc_copy (QImode, d_addr, s_addr);
+    }
+
+  if (over)
+    emit_label (over);
 }
 
 /* This function checks whether a real value can be encoded as

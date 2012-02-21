@@ -26,7 +26,7 @@ extern int legitimate_const_double_p (rtx);
 extern void notice_update_cc_on_set (rtx, rtx);
 extern void output_addr_const_pdp11 (FILE *, rtx);
 extern void split_move_multiple (rtx *);
-extern const char *output_block_move (rtx *);
+extern void split_block_move (rtx *);
 extern const char *output_jump (enum rtx_code, int, int);
 extern void print_operand_address (FILE *, rtx);
 extern bool pdp11_cannot_change_mode_class (enum machine_mode,

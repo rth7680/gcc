@@ -449,43 +449,39 @@
 ;; let constraints only accept a register ...
 
 (define_expand "movmemhi"
-  [(parallel [(set (match_operand:BLK 0 "general_operand" "=g,g")
-		   (match_operand:BLK 1 "general_operand" "g,g"))
-	      (use (match_operand:HI 2 "general_operand" "n,mr"))
-	      (use (match_operand:HI 3 "immediate_operand" "i,i"))
+  [(parallel [(set (match_operand:BLK 0 "memory_operand" "")
+		   (match_operand:BLK 1 "memory_operand" ""))
+	      (use (match_operand:HI 2 "nonmemory_operand" ""))
+	      (use (match_operand:HI 3 "const_int_operand" ""))
 	      (clobber (match_scratch:HI 4 "=&r,X"))
 	      (clobber (match_dup 5))
 	      (clobber (match_dup 6))
 	      (clobber (match_dup 2))])]
   "TARGET_BCOPY_BUILTIN"
 {
-  operands[0]
-    = replace_equiv_address (operands[0],
-			     copy_to_mode_reg (Pmode, XEXP (operands[0], 0)));
-  operands[1]
-    = replace_equiv_address (operands[1],
-			     copy_to_mode_reg (Pmode, XEXP (operands[1], 0)));
-
-  operands[5] = XEXP (operands[0], 0);
-  operands[6] = XEXP (operands[1], 0);
+  operands[5] = copy_to_mode_reg (Pmode, XEXP (operands[0], 0));
+  operands[0] = replace_equiv_address (operands[0], operands[5]);
+  operands[6] = copy_to_mode_reg (Pmode, XEXP (operands[1], 0));
+  operands[1] = replace_equiv_address (operands[1], operands[6]);
 })
 
-
-(define_insn "movmemhi1"
+(define_insn_and_split "*movmemhi"
   [(set (mem:BLK (match_operand:HI 0 "register_operand" "r,r"))
 	(mem:BLK (match_operand:HI 1 "register_operand" "r,r")))
-   (use (match_operand:HI 2 "general_operand" "n,r"))
-   (use (match_operand:HI 3 "immediate_operand" "i,i"))
+   (use (match_operand:HI 2 "nonmemory_operand" "n,r"))
+   (use (match_operand:HI 3 "const_int_operand" "n,n"))
    (clobber (match_scratch:HI 4 "=&r,X"))
    (clobber (match_dup 0))
    (clobber (match_dup 1))
    (clobber (match_dup 2))]
   "TARGET_BCOPY_BUILTIN"
+  "#"
+  "&& reload_completed"
+  [(const_int 0)]
 {
-  return output_block_move (operands);
-}
-  ;; just a guess
-  [(set_attr "length" "80")])
+  split_block_move (operands);
+  DONE;
+})
 
 ;;- truncation instructions
 

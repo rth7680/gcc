@@ -244,7 +244,19 @@
    cmp<isfx> %0,%1"
   [(set_attr "extra_word_ops" "op0,op01")])
 
-(define_insn "*sob"
+(define_expand "doloop_end"
+  [(use (match_operand 0 "" ""))        ; loop pseudo
+   (use (match_operand 1 "" ""))        ; iterations; zero if unknown
+   (use (match_operand 2 "" ""))        ; max iterations
+   (use (match_operand 3 "" ""))        ; loop level
+   (use (match_operand 4 "" ""))]       ; label
+  "TARGET_40_PLUS"
+{
+  emit_jump_insn (gen_sob (operands[0], operands[4]));
+  DONE;
+})
+
+(define_insn "sob"
   [(set (pc)
 	(if_then_else
 	 (ne (plus:HI (match_operand:HI 0 "nonimmediate_operand" "+r,!m")

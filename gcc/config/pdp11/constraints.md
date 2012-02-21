@@ -27,21 +27,6 @@
 (define_register_constraint "d" "MUL_REGS"
   "General register that can be used for 16-bit multiply (odd numbered)")
 
-(define_constraint "I"
-  "Integer constant that fits in 16 bits unsigned"
-  (and (match_code "const_int")
-       (match_test "(ival & 0xffff0000) == 0")))
-
-(define_constraint "J"
-  "Integer constant whose low 16 bits are zero"
-  (and (match_code "const_int")
-       (match_test "(ival & 0xffff) == 0")))
-
-(define_constraint "K"
-  "Integer constant whose lower and upper 16 bit half are both non-zero"
-  (and (match_code "const_int")
-       (match_test "(ival & 0xffff) != 0 && (ival & 0xffff0000) != 0")))
-
 (define_constraint "L"
   "Integer constant 1"
   (and (match_code "const_int")
@@ -61,16 +46,3 @@
   "Defines a real zero constant."
   (and (match_code "const_double")
        (match_test "op == CONST0_RTX (GET_MODE (op))")))
-
-(define_constraint "Q"
-  "Memory reference that requires an additional word after the opcode"
-  (and (match_code "mem")
-       (match_test "memory_address_p (GET_MODE (op), XEXP (op, 0))
-                    && !simple_memory_operand (op, GET_MODE (op))")))
-
-(define_constraint "R"
-  "Memory reference that is encoded within the opcode"
-  (and (match_code "mem")
-       (match_test "memory_address_p (GET_MODE (op), XEXP (op, 0))
-                    && simple_memory_operand (op, GET_MODE (op))")))
-

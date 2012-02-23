@@ -1,3 +1,11 @@
+LIB1ASMSRC = pdp11/lib1funcs.S
+LIB1ASMFUNCS = \
+	_ashlhi3 _ashrhi3 _lshrhi3 \
+	_ashlsi3 _ashrsi3 _lshrsi3 \
+	_ashldi3 _ashrdi3 _lshrdi3 \
+	_mulhi3 _mulsi3 \
+	_udivmodhi4 _udivhi3 _umodhi3 _divhi3 _modhi3 \
+
 LIB2ADD = $(srcdir)/udivmod.c \
 	  $(srcdir)/udivmodsi4.c \
 	  $(srcdir)/memcmp.c \

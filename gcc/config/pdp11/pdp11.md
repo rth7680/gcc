@@ -236,13 +236,26 @@
 
 (define_insn "*cmp<mode>"
   [(set (cc0)
-	(compare (match_operand:I12 0 "general_operand" "rm,rmi")
-		 (match_operand:I12 1 "general_operand" " N,rmi")))]
+	(compare (match_operand:I12 0 "general_operand" "g,g")
+		 (match_operand:I12 1 "general_operand" "N,g")))]
   ""
   "@
    tst<isfx> %0
    cmp<isfx> %0,%1"
   [(set_attr "extra_word_ops" "op0,op01")])
+
+;; PDP11/45 manual says that "BIT MEM,REG" is faster than "BIT REG,MEM",
+;; even though the result is not stored.
+(define_insn "*bit<mode>"
+  [(set (cc0)
+	(compare (and:I12 (match_operand:I12 0 "general_operand" "g,g")
+			  (match_operand:I12 1 "general_operand" "r,g"))
+		 (const_int 0)))]
+  ""
+  "@
+   bit<isfx> %0,%1
+   bit<isfx> %1,%0"
+  [(set_attr "extra_word_ops" "op01")])
 
 (define_expand "doloop_end"
   [(use (match_operand 0 "" ""))        ; loop pseudo

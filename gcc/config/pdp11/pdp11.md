@@ -234,7 +234,7 @@
 }
   [(set_attr "extra_word_ops" "op0")])
 
-(define_insn "*cmp<mode>"
+(define_insn "cmp<mode>"
   [(set (cc0)
 	(compare (match_operand:I12 0 "general_operand" "g,g")
 		 (match_operand:I12 1 "general_operand" "N,g")))]
@@ -414,7 +414,7 @@
    mov<isfx> %1, %0"
   [(set_attr "extra_word_ops" "op0,op01")])
 
-(define_insn "*mov<mode>_flags_out"
+(define_insn "mov<mode>_flags_out"
   [(set (match_operand:I12 0 "nonimmediate_operand" "=rm,rm")
 	(unspec_volatile:I12 [(match_operand:I12 1 "general_operand" "N,g")]
 			     UNSPECV_MOV))]
@@ -602,13 +602,22 @@
   [(set (match_operand:SI 0 "nonimmediate_operand")
 	(sign_extend:SI (match_operand 1 "general_operand")))]
   "TARGET_40_PLUS && reload_completed"
-  [(set (match_dup 2) (unspec_volatile:HI [(match_dup 1)] UNSPECV_MOV))
-   (set (match_dup 0) (unspec_volatile:HI [(const_int 0)] UNSPECV_SXT))]
+  [(const_int 0)]
 {
-  rtx exops[1][2];
+  rtx exops[2][2];
   pdp11_expand_operands (operands, exops, 1, NULL, little);
-  operands[2] = exops[0][0];
-  operands[0] = exops[1][0];
+
+  if (rtx_equal_p (exops[0][0], operands[1]))
+    {
+      emit_insn (gen_cmphi (exops[0][0], const0_rtx));
+      emit_insn (gen_sxt_cc0_in (exops[1][0]));
+    }
+  else
+    {
+      emit_insn (gen_movhi_flags_out (exops[0][0], operands[1]));
+      emit_insn (gen_sxt_flags_in (exops[1][0]));
+    }
+  DONE;
 })
 
 ;; Split both QI and HImode extensions to SImode, for non-40+
@@ -665,13 +674,21 @@
   DONE;
 })
 
-(define_insn "*sxt_flags_in"
+(define_insn "sxt_flags_in"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
 	(unspec_volatile:HI [(const_int 0)] UNSPECV_SXT))]
   "TARGET_40_PLUS && reload_completed"
   "sxt %0"
   [(set_attr "extra_word_ops" "op0")])
 
+(define_insn "sxt_cc0_in"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(if_then_else:HI (lt (cc0) (const_int 0))
+	  (const_int -1)
+	  (const_int 0)))]
+  "TARGET_40_PLUS"
+  "sxt %0"
+  [(set_attr "extra_word_ops" "op0")])
 
 ;; make float to int and vice versa
 ;; using the cc_status.flag field we could probably cut down
@@ -1018,25 +1035,24 @@
 	(ashift:HI (match_operand:HI 1 "register_operand" "0")
 		   (match_operand:HI 2 "general_operand" "g")))]
   "TARGET_40_PLUS"
-{
-  /* Same size as the ASH, but lots faster. */
-  if (CONST_INT_P (operands[2]) && INTVAL (operands[2]) == 15)
-    return "tst %0\;sxt %0";
-  else
-    return "ash %2,%0";
-}
+  "ash %2,%0"
   [(set_attr "extra_word_ops" "op2")])
 
-(define_insn_and_split "*ashlhi3_small"
+(define_insn "*ashlhi3_small"
   [(set (match_operand:HI 0 "register_operand" "=r")
 	(ashift:HI (match_operand:HI 1 "register_operand" "0")
 		   (match_operand:HI 2 "shifthi_operand" "n")))]
   "!TARGET_40_PLUS"
-  "#"
-  "&& reload_completed"
+  "#")
+
+(define_split
+  [(set (match_operand:HI 0 "register_operand" "")
+	(ashift:HI (match_dup 0)
+		   (match_operand:HI 1 "shifthi_operand" "")))]
+  "reload_completed"
   [(const_int 0)]
 {
-  int i, n = INTVAL (operands[2]);
+  int i, n = INTVAL (operands[1]);
   rtx shift, op = operands[0];
 
   if (n == 0)
@@ -1044,18 +1060,27 @@
       emit_note (NOTE_INSN_DELETED);
       DONE;
     }
+  if (n == 1 || n == -1)
+    FAIL;
   if (n == 8 || n == -8)
     {
-      emit_insn (gen_bswaphi2 (operands[0], operands[0]));
+      emit_insn (gen_bswaphi2 (op, op));
       if (n == -8)
-	emit_insn (gen_extendqihi2 (operands[0],
-				    gen_lowpart (QImode, operands[0])));
+	emit_insn (gen_extendqihi2 (op, gen_lowpart (QImode, op)));
       else
-        emit_insn (gen_andhi3 (operands[0], operands[0], GEN_INT (-256)));
+        emit_insn (gen_andhi3 (op, op, GEN_INT (-256)));
       DONE;
     }
-  /* Should have been matched by previous patterns.  */
-  gcc_checking_assert (n != 1 || n != -1);
+  if (TARGET_40_PLUS)
+    {
+      if (n <= -15)
+	{
+	  emit_insn (gen_cmphi (op, const0_rtx));
+	  emit_insn (gen_sxt_cc0_in (op));
+	  DONE;
+	}
+      FAIL;
+    }
 
   /* Arithmetic right shift on the pdp works by negating the shift
      count; support that as input from other shift ops.  */
@@ -1144,6 +1169,41 @@
   operands[2] = negate_rtx (HImode, operands[2]);
 })
 
+(define_split
+  [(set (match_operand:SI 0 "register_operand" "")
+	(ashift:SI (match_dup 0)
+		   (match_operand:HI 1 "const_int_operand" "")))]
+  "TARGET_40_PLUS && reload_completed
+   && (INTVAL (operands[1]) >= 16 || INTVAL (operands[1]) <= -16)"
+  [(const_int 0)]
+{
+  rtx hi = gen_highpart (HImode, operands[0]);
+  rtx lo = gen_lowpart (HImode, operands[0]);
+  int c = INTVAL (operands[1]);
+
+  if (c > 0)
+    {
+      emit_move_insn (hi, lo);
+      emit_move_insn (lo, const0_rtx);
+      if (c > 16)
+        emit_insn (gen_ashlhi3 (hi, hi, GEN_INT (c - 16)));
+    }
+  else if (c <= -31)
+    {
+      emit_insn (gen_ashlhi3 (hi, hi, GEN_INT (-15)));
+      emit_move_insn (lo, hi);
+    }
+  else
+    {
+      emit_move_insn (lo, hi);
+      emit_insn (gen_cmphi (lo, const0_rtx));
+      emit_insn (gen_sxt_cc0_in (hi));
+      if (c < -16)
+	emit_insn (gen_ashlhi3 (lo, lo, GEN_INT (c + 16)));
+    }
+  DONE;
+})
+
 (define_insn_and_split "lshrsi3"
   [(set (match_operand:SI 0 "register_operand" "=r,r")
 	(lshiftrt:SI (match_operand:SI 1 "register_operand" "0,0")
@@ -1158,16 +1218,32 @@
   if (CONST_INT_P (operands[2]))
     {
       int n = INTVAL (operands[2]);
+      rtx hi = gen_highpart (HImode, op);
+      rtx lo = gen_lowpart (HImode, op);
+
       if (n == 0)
+	emit_note (NOTE_INSN_DELETED);
+      else if (n == 1)
 	{
-	  emit_note (NOTE_INSN_DELETED);
-	  DONE;
+	  emit_insn (gen_clear_carry_out ());
+	  emit_insn (gen_rorhi_carry_in (hi));
+	  emit_insn (gen_rorhi_carry_in (hi));
 	}
-      emit_insn (gen_clear_carry_out ());
-      emit_insn (gen_rorhi_carry_in (gen_highpart (HImode, op)));
-      emit_insn (gen_rorhi_carry_in (gen_lowpart (HImode, op)));
-      if (n > 2)
-	emit_insn (gen_ashlsi3 (op, op, GEN_INT (1 - n)));
+      else if (n >= 16)
+	{
+	  emit_move_insn (lo, hi);
+	  emit_move_insn (hi, const0_rtx);
+	  if (n > 16)
+	    {
+	      n -= 16;
+	      emit_insn (gen_lshrhi3 (lo, lo, GEN_INT (n)));
+	    }
+	}
+      else
+	{
+	  emit_insn (gen_ashlsi3 (op, op, GEN_INT (-n)));
+	  emit_insn (gen_bichi3 (hi, hi, GEN_INT (~(0xffff >> n))));
+	}
     }
   else
     {

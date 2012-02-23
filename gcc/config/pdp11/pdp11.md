@@ -495,6 +495,34 @@
    {stcdf|movfo} %1, %0"
   [(set_attr "extra_word_ops" "op0")])
 
+;;- zero extension instructions
+;; Without these patterns, optabs.c will try to use shifts, not ands.
+
+(define_insn_and_split "zero_extendqihi2"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=r,o")
+	(zero_extend:HI (match_operand:QI 1 "general_operand" "0,0")))]
+  ""
+  "#"
+  "reload_completed"
+  [(const_int 0)]
+{
+  if (REG_P (operands[0]))
+    emit_insn (gen_andhi3 (operands[0], operands[0], GEN_INT (0xff)));
+  else
+    emit_move_insn (adjust_address (operands[0], QImode, 1), const0_rtx);
+  DONE;
+})
+
+(define_expand "zero_extendhisi2"
+  [(set (match_operand:SI 0 "nonimmediate_operand" "")
+	(zero_extend:SI (match_operand:HI 1 "general_operand" "")))]
+  ""
+{
+  emit_move_insn (gen_lowpart (HImode, operands[0]), operands[1]);
+  emit_move_insn (gen_highpart (HImode, operands[0]), const0_rtx);
+  DONE;
+})
+
 ;;- sign extension instructions
 
 (define_insn "extendsfdf2"

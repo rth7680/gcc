@@ -976,7 +976,29 @@
   [(set_attr "extra_word_ops" "op02")])
 
 ;;- xor instructions
-(define_insn "xorhi3"
+(define_expand "xorhi3"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "")
+	(xor:HI (match_operand:HI 1 "general_operand" "")
+		(match_operand:HI 2 "general_operand" "")))]
+  ""
+{
+  if (!TARGET_40_PLUS)
+    {
+      rtx op1, op2, t1, t2;
+
+      op1 = force_reg (HImode, operands[1]);
+      op2 = force_reg (HImode, operands[2]);
+      t1 = gen_reg_rtx (HImode);
+      t2 = gen_reg_rtx (HImode);
+
+      emit_insn (gen_bichi3 (t1, op1, op2));
+      emit_insn (gen_bichi3 (t2, op2, op1));
+      emit_insn (gen_iorhi3 (operands[0], t1, t2));
+      DONE;
+    }
+})
+
+(define_insn "*xorhi3"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
 	(xor:HI (match_operand:HI 1 "general_operand" "%0")
 		(match_operand:HI 2 "general_operand" "r")))]

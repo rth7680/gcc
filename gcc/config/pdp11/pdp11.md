@@ -827,13 +827,31 @@
   DONE;
 })
 
+;; The second alternative helps reduce register pressure in some instances.
 (define_insn "subhi3"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
-	(minus:HI (match_operand:HI 1 "general_operand" "0")
-		  (match_operand:HI 2 "general_operand" "g")))]
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm,?r")
+	(minus:HI (match_operand:HI 1 "general_operand" "0,g")
+		  (match_operand:HI 2 "general_operand" "g,0")))]
   ""
-  "sub %2, %0"
+  "@
+   sub %2, %0
+   #"
   [(set_attr "extra_word_ops" "op02")])
+
+(define_split
+  [(set (match_operand:HI 0 "register_operand" "")
+	(minus:HI (match_operand:HI 1 "general_operand" "")
+		  (match_dup 0)))]
+  "reload_completed"
+  [(set (match_dup 0) (neg:HI (match_dup 0)))
+   (set (match_dup 0) (plus:HI (match_dup 0) (match_dup 1)))]
+{
+  if (rtx_equal_p (operands[0], operands[1]))
+    {
+      emit_move_insn (operands[0], const0_rtx);
+      DONE;
+    }
+})
 
 (define_insn "subhi_carry_out"
   [(set (match_operand:HI 0 "nonimmediate_operand" "+rm")
@@ -903,7 +921,7 @@
 (define_insn "xorhi3"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
 	(xor:HI (match_operand:HI 1 "general_operand" "%0")
-		(match_operand:HI 2 "register_operand" "r")))]
+		(match_operand:HI 2 "general_operand" "r")))]
   "TARGET_40_PLUS"
   "xor %2, %0"
   [(set_attr "extra_word_ops" "op0")])

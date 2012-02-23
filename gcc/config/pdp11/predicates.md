@@ -27,13 +27,13 @@
 (define_predicate "const_shifthi_operand"
   (and (match_code "const_int")
        (ior (match_test "TARGET_40_PLUS")
-	    (match_test "IN_RANGE (INTVAL (op), -4, 4)"))))
+	    (match_test "IN_RANGE (INTVAL (op), -4, 4)")
+	    (match_test "INTVAL (op) == 8 || INTVAL (op) == -8"))))
 
 (define_predicate "shifthi_operand"
   (ior (and (match_test "TARGET_40_PLUS")
 	    (match_operand 0 "general_operand"))
-       (and (match_code "const_int")
-	    (match_test "IN_RANGE (INTVAL (op), -4, 4)"))))
+       (match_operand 0 "const_shifthi_operand")))
 
 ;; Accept only hard floating point registers
 (define_predicate "hard_float_reg_operand"

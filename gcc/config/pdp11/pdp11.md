@@ -1005,7 +1005,13 @@
 	(ashift:HI (match_operand:HI 1 "register_operand" "0")
 		   (match_operand:HI 2 "general_operand" "g")))]
   "TARGET_40_PLUS"
-  "ash %2,%0"
+{
+  /* Same size as the ASH, but lots faster. */
+  if (CONST_INT_P (operands[2]) && INTVAL (operands[2]) == 15)
+    return "tst %0\;sxt %0";
+  else
+    return "ash %2,%0";
+}
   [(set_attr "extra_word_ops" "op2")])
 
 (define_insn_and_split "*ashlhi3_small"
@@ -1023,6 +1029,16 @@
   if (n == 0)
     {
       emit_note (NOTE_INSN_DELETED);
+      DONE;
+    }
+  if (n == 8 || n == -8)
+    {
+      emit_insn (gen_bswaphi2 (operands[0], operands[0]));
+      if (n == -8)
+	emit_insn (gen_extendqihi2 (operands[0],
+				    gen_lowpart (QImode, operands[0])));
+      else
+        emit_insn (gen_andhi3 (operands[0], operands[0], GEN_INT (-256)));
       DONE;
     }
   /* Should have been matched by previous patterns.  */
@@ -1072,12 +1088,17 @@
   [(const_int 0)]
 {
   rtx op = operands[0];
-  int i, n = INTVAL (operands[2]);
+  int i, n = INTVAL (operands[2]) & 15;
 
   if (n == 0)
     emit_note (NOTE_INSN_DELETED);
   else if (n >= 16)
     emit_move_insn (op, const0_rtx);
+  else if (n == 8)
+    {
+      emit_insn (gen_bswaphi2 (operands[0], operands[0]));
+      emit_insn (gen_andhi3 (operands[0], operands[0], GEN_INT (0xff)));
+    }
   else if (TARGET_40_PLUS && n >= 2)
     {
       emit_insn (gen_ashlhi3 (op, op, GEN_INT (-n)));

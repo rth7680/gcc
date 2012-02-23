@@ -890,6 +890,87 @@ extern UDItype __umulsidi3 (USItype, USItype);
   } while (0)
 #endif /* __ns32000__ */
 
+#if defined(__pdp11__)
+/* We implement both SImode and DImode addition inline.  */
+# define add_ssaaaa(sh, sl, ah, al, bh, bl) \
+	do {						\
+	  DWunion __s, __a, __b;			\
+	  __a.s.low = (al); __a.s.high = (ah);		\
+	  __b.s.low = (bl); __b.s.high = (bh);		\
+	  __s.ll = __a.ll + __b.ll;			\
+	  (sl) = __s.s.low; (sh) = __s.s.high;		\
+	} while (0)
+# define sub_ddmmss(sh, sl, ah, al, bh, bl) \
+	do {						\
+	  DWunion __s, __a, __b;			\
+	  __a.s.low = (al); __a.s.high = (ah);		\
+	  __b.s.low = (bl); __b.s.high = (bh);		\
+	  __s.ll = __a.ll - __b.ll;			\
+	  (sl) = __s.s.low; (sh) = __s.s.high;		\
+	} while (0)
+#  define count_leading_zeros16(C,X) \
+	do {						\
+	  UHItype __x = (X);				\
+	  if (!(__x & 0xff00)) __x <<= 8, C += 8;	\
+	  if (!(__x & 0xf000)) __x <<= 4, C += 4;	\
+	  if (!(__x & 0xc000)) __x <<= 2, C += 2;	\
+	  if (!(__x & 0x8000)) C += 1;			\
+	} while (0)
+#  define count_trailing_zeros16(C,X) \
+	do {						\
+	  UHItype __x = (X);				\
+	  __x = __x & ~(__x - 1); /* __x & -__x */	\
+	  if (__x & 0xff00) C += 8;			\
+	  if (__x & 0xf0f0) C += 4;			\
+	  if (__x & 0xcccc) C += 2;			\
+	  if (__x & 0xaaaa) C += 1;			\
+	} while (0)
+# if W_TYPE_SIZE == 16
+#  define count_leading_zeros(COUNT,X) \
+	do {						\
+	  COUNT = 0;					\
+	  count_leading_zeros16 (COUNT, X);		\
+	} while (0)
+#  define count_trailing_zeros(COUNT,X) \
+	do {						\
+	  COUNT = 0;					\
+	  count_trailing_zeros16 (COUNT, X);		\
+	} while (0)
+#  if (defined(__pdp11_40__) || defined(__pdp11_45__))
+#   define smul_ppmm(w1, w0, u, v) \
+	do {						\
+	  DWunion __w;					\
+	  __w.ll = (long)(int)(u) * (int)(v);		\
+	  (w1) = __w.s.high; (w0) = __w.s.low;		\
+	} while (0)
+#   define sdiv_qrnnd(q, r, nh, nl, d) \
+	do {						\
+	  DWunion __w;					\
+	  __w.s.high = (nh); __w.s.low = (nl);		\
+	  asm("div %1, %0" : "+r"(__w.ll) : "g"(d));	\
+	  (q) = __w.s.high; (r) = __w.s.low;		\
+	} while (0)
+#  endif /* __pdp11_45__ */
+# elif W_TYPE_SIZE == 32
+#  define count_leading_zeros(COUNT,X) \
+	do {						\
+	  union { USItype ll; UHItype i[2]; } __u;	\
+	  UHItype __h;					\
+	  __u.ll = (X); __h = __u.i[0]; COUNT = 0;	\
+	  if (__h == 0) __h = __u.i[1], COUNT = 16;	\
+	  count_leading_zeros16 (COUNT, __h);		\
+	} while (0)
+#  define count_trailing_zeros(COUNT,X) \
+	do {						\
+	  union { USItype ll; UHItype i[2]; } __u;	\
+	  UHItype __h;					\
+	  __u.ll = (X); __h = __u.i[1];	COUNT = 0;	\
+	  if (__h == 0) __h = __u.i[0], COUNT = 16;	\
+	  count_trailing_zeros16 (COUNT, __h);		\
+	} while (0)
+# endif /* W_TYPE_SIZE */
+#endif /* __pdp11__ */
+
 /* FIXME: We should test _IBMR2 here when we add assembly support for the
    system vendor compilers.
    FIXME: What's needed for gcc PowerPC VxWorks?  __vxworks__ is not good

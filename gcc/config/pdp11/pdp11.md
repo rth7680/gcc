@@ -1468,7 +1468,7 @@
 ;;- jump to subroutine
 
 (define_insn "call"
-  [(call (match_operand:HI 0 "general_operand" "g")
+  [(call (match_operand:HI 0 "memory_operand" "m")
 	 (match_operand:HI 1 "" ""))]
   ""
   "jsr pc, %0"
@@ -1477,7 +1477,7 @@
 ;;- jump to subroutine
 (define_insn "call_value"
   [(set (match_operand 0 "" "")
-	(call (match_operand:HI 1 "general_operand" "m")
+	(call (match_operand:HI 1 "memory_operand" "m")
 	      (match_operand:HI 2 "" "")))]
   ""
   "jsr pc, %1"

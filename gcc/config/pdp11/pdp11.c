@@ -1829,4 +1829,106 @@ pdp11_legitimate_constant_p (enum machine_mode mode ATTRIBUTE_UNUSED, rtx x)
   return GET_CODE (x) != CONST_DOUBLE || legitimate_const_double_p (x);
 }
 
+void
+pdp11_expand_branch (enum rtx_code code, rtx op0, rtx op1, rtx lab)
+{
+  enum machine_mode mode;
+  int ofs;
+  rtx x;
+
+  if (CONSTANT_P (op0) && !CONSTANT_P (op1))
+    {
+      x = op0, op0 = op1, op1 = x;
+      code = swap_condition (code);
+    }
+  mode = GET_MODE (op0);
+
+  if (mode == QImode || mode == HImode)
+    {
+      x = gen_rtx_COMPARE (VOIDmode, op0, op1);
+      emit_insn (gen_rtx_SET (VOIDmode, cc0_rtx, x));
+
+      x = gen_rtx_fmt_ee (code, VOIDmode, cc0_rtx, const0_rtx);
+      lab = gen_rtx_LABEL_REF (VOIDmode, lab);
+      x = gen_rtx_IF_THEN_ELSE (VOIDmode, x, lab, pc_rtx);
+      emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx, x));
+      return;
+    }
+
+  if (mode == SImode)
+    {
+      rtx lo0, lo1, hi0, hi1, lab2;
+      enum rtx_code code1, code2, code3;
+      int ofs;
+
+      ofs = subreg_lowpart_offset (HImode, SImode);
+      lo0 = simplify_gen_subreg (HImode, op0, SImode, ofs);
+      lo1 = simplify_gen_subreg (HImode, op1, SImode, ofs);
+
+      ofs = subreg_highpart_offset (HImode, SImode);
+      hi0 = simplify_gen_subreg (HImode, op0, SImode, ofs);
+      hi1 = simplify_gen_subreg (HImode, op1, SImode, ofs);
+
+      if (CONST_INT_P (hi1))
+	switch (code)
+	  {
+	  case LT: case LTU: case GE: case GEU:
+	    if (lo1 == const0_rtx)
+	      {
+		pdp11_expand_branch (code, hi0, hi1, lab);
+		return;
+	      }
+	    break;
+	  case LE: case LEU: case GT: case GTU:
+	    if (lo1 == constm1_rtx)
+	      {
+		pdp11_expand_branch (code, hi0, hi1, lab);
+		return;
+	      }
+	    break;
+	  default:
+	    break;
+	  }
+
+      /* Otherwise we need 2 or 3 jumps.  */
+      lab2 = gen_label_rtx ();
+      code1 = code;
+      code2 = swap_condition (code);
+      code3 = unsigned_condition (code);
+
+      switch (code)
+	{
+	case LT: case GT: case LTU: case GTU:
+	  break;
+
+	case LE:  code1 = LT,  code2 = GT;  break;
+	case GE:  code1 = GT,  code2 = LT;  break;
+	case LEU: code1 = LTU, code2 = GTU; break;
+	case GEU: code1 = GTU, code2 = LTU; break;
+
+	case EQ:
+	  code2 = NE;
+	  /* FALLTHRU */
+	case NE:
+	  code1 = UNKNOWN;
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+
+      if (code1 != UNKNOWN)
+	pdp11_expand_branch (code1, hi0, hi1, lab);
+      if (code2 != UNKNOWN)
+	pdp11_expand_branch (code2, hi0, hi1, lab2);
+      pdp11_expand_branch (code3, lo0, lo1, lab);
+
+      if (code2 != UNKNOWN)
+	emit_label (lab2);
+      return;
+    }
+
+  gcc_unreachable ();
+}
+
 struct gcc_target targetm = TARGET_INITIALIZER;

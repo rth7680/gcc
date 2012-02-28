@@ -74,6 +74,7 @@
 ;; Integer modes supported on the PDP11, with a mapping from machine mode
 ;; to mnemonic suffix.  SImode and DImode always are special cases.
 (define_mode_iterator I12 [QI HI])
+(define_mode_iterator I124 [QI HI SI])
 (define_mode_iterator I48 [SI DI])
 (define_mode_attr  isfx [(QI "b") (HI "")])
 
@@ -323,16 +324,19 @@
   "")
 
 (define_expand "cbranch<mode>4"
-  [(set (cc0)
-        (compare (match_operand:I12 1 "general_operand")
-		 (match_operand:I12 2 "general_operand")))
-   (set (pc)
-	(if_then_else (match_operator 0 "ordered_comparison_operator"
-		       [(cc0) (const_int 0)])
-		      (label_ref (match_operand 3 "" ""))
-		      (pc)))]
+  [(set (pc)
+	(if_then_else
+	  (match_operator 0 "ordered_comparison_operator"
+	    [(match_operand:I124 1 "general_operand")
+	     (match_operand:I124 2 "general_operand")])
+          (label_ref (match_operand 3 "" ""))
+	  (pc)))]
   ""
-  "")
+{
+  pdp11_expand_branch (GET_CODE (operands[0]), operands[1],
+		       operands[2], operands[3]);
+  DONE;
+})
 
 ;; problem with too short jump distance! we need an assembler which can
 ;; make this valid for all jump distances!

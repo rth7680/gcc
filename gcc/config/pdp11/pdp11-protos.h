@@ -41,6 +41,7 @@ extern int pdp11_sp_frame_offset (void);
 extern int pdp11_initial_elimination_offset (int, int);
 extern enum reg_class pdp11_regno_reg_class (int);
 
+extern void pdp11_expand_branch (enum rtx_code, rtx, rtx, rtx);
 #endif /* RTX_CODE */
 
 extern void output_ascii (FILE *, const char *, int);

@@ -235,15 +235,19 @@
 }
   [(set_attr "extra_word_ops" "op0")])
 
-(define_insn "cmp<mode>"
+;; ??? The compare instruction allows both operands to be fully general,
+;; but if we allow that we can wind up with (compare 0 0) and the like,
+;; which can ICEs due to the lack of a mode on either operand.
+(define_insn "cmp<mode>_internal"
   [(set (cc0)
-	(compare (match_operand:I12 0 "general_operand" "g,g")
-		 (match_operand:I12 1 "general_operand" "N,g")))]
-  ""
+	(compare (match_operand:I12 0 "general_operand" "rm,rm,i")
+		 (match_operand:I12 1 "general_operand" "N,g,rm")))]
+  "!(CONST_INT_P (operands[0]) && CONST_INT_P (operands[1]))"
   "@
    tst<isfx> %0
+   cmp<isfx> %0,%1
    cmp<isfx> %0,%1"
-  [(set_attr "extra_word_ops" "op0,op01")])
+  [(set_attr "extra_word_ops" "op0,op01,op01")])
 
 ;; PDP11/45 manual says that "BIT MEM,REG" is faster than "BIT REG,MEM",
 ;; even though the result is not stored.
@@ -613,7 +617,7 @@
 
   if (rtx_equal_p (exops[0][0], operands[1]))
     {
-      emit_insn (gen_cmphi (exops[0][0], const0_rtx));
+      emit_insn (gen_cmphi_internal (exops[0][0], const0_rtx));
       emit_insn (gen_sxt_cc0_in (exops[1][0]));
     }
   else
@@ -1064,7 +1068,7 @@
     emit_move_insn (op, const0_rtx);
   else if (TARGET_40_PLUS && n <= -15)
     {
-      emit_insn (gen_cmphi (op, const0_rtx));
+      emit_insn (gen_cmphi_internal (op, const0_rtx));
       emit_insn (gen_sxt_cc0_in (op));
     }
   else if (n <= -15)
@@ -1206,7 +1210,7 @@
   else
     {
       emit_move_insn (lo, hi);
-      emit_insn (gen_cmphi (lo, const0_rtx));
+      emit_insn (gen_cmphi_internal (lo, const0_rtx));
       emit_insn (gen_sxt_cc0_in (hi));
       if (c < -16)
 	emit_insn (gen_ashlhi3 (lo, lo, GEN_INT (c + 16)));

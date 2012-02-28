@@ -633,48 +633,15 @@
 {
   rtx hi = gen_highpart (HImode, operands[0]);
   rtx lo = gen_lowpart (HImode, operands[0]);
-  rtx lab1, lab2, x;
 
-  if (!reg_overlap_mentioned_p (hi, operands[1]))
-    {
-      lab1 = gen_label_rtx ();
-
-      emit_move_insn (hi, const0_rtx);
-
-      if (GET_MODE (operands[1]) == HImode)
-	emit_move_insn (lo, operands[1]);
-      else
-	emit_insn (gen_extendqihi2 (lo, operands[1]));
-
-      x = gen_rtx_GE (VOIDmode, lo, const0_rtx);
-      emit_jump_insn (gen_cbranchhi4 (x, lo, const0_rtx, lab1));
-      
-      emit_insn (gen_addhi3 (hi, hi, constm1_rtx));
-
-      emit_label (lab1);
-    }
+  if (GET_MODE (operands[1]) == QImode)
+    emit_insn (gen_extendqihi2 (lo, operands[1]));
   else
-    {
-      lab1 = gen_label_rtx ();
-      lab2 = gen_label_rtx ();
-
-      if (GET_MODE (operands[1]) == HImode)
-	emit_move_insn (lo, operands[1]);
-      else
-	emit_insn (gen_extendqihi2 (lo, operands[1]));
-
-      x = gen_rtx_GE (VOIDmode, lo, const0_rtx);
-      emit_jump_insn (gen_cbranchhi4 (x, lo, const0_rtx, lab1));
-
-      emit_move_insn (hi, constm1_rtx);
-      emit_jump_insn (gen_jump (lab2));
-      emit_barrier ();
-
-      emit_label (lab1);
-      emit_move_insn (hi, const0_rtx);
-
-      emit_label (lab2);
-    }
+    emit_move_insn (lo, operands[1]);
+  emit_move_insn (hi, const0_rtx);
+  emit_insn (gen_aslhi_carry_out (lo));
+  emit_insn (gen_subhi_carry_in (hi));
+  emit_insn (gen_rorhi_carry_in (lo));
   DONE;
 })
 
@@ -1067,14 +1034,14 @@
 (define_insn "*ashlhi3_small"
   [(set (match_operand:HI 0 "register_operand" "=r")
 	(ashift:HI (match_operand:HI 1 "register_operand" "0")
-		   (match_operand:HI 2 "shifthi_operand" "n")))]
+		   (match_operand:HI 2 "const_shifthi_operand" "n")))]
   "!TARGET_40_PLUS"
   "#")
 
 (define_split
   [(set (match_operand:HI 0 "register_operand" "")
 	(ashift:HI (match_dup 0)
-		   (match_operand:HI 1 "shifthi_operand" "")))]
+		   (match_operand:HI 1 "const_shifthi_operand" "")))]
   "reload_completed"
   [(const_int 0)]
 {
@@ -1082,43 +1049,54 @@
   rtx shift, op = operands[0];
 
   if (n == 0)
-    {
-      emit_note (NOTE_INSN_DELETED);
-      DONE;
-    }
-  if (n == 1 || n == -1)
+    emit_note (NOTE_INSN_DELETED);
+  else if (n == 1 || n == -1)
     FAIL;
-  if (n == 8 || n == -8)
+  else if (n == 8 || n == -8)
     {
       emit_insn (gen_bswaphi2 (op, op));
       if (n == -8)
 	emit_insn (gen_extendqihi2 (op, gen_lowpart (QImode, op)));
       else
-        emit_insn (gen_andhi3 (op, op, GEN_INT (-256)));
-      DONE;
+        emit_insn (gen_andhi3 (op, op, gen_int_mode (0xff00, HImode)));
     }
-  if (TARGET_40_PLUS)
+  else if (n >= 16)
+    emit_move_insn (op, const0_rtx);
+  else if (TARGET_40_PLUS && n <= -15)
     {
-      if (n <= -15)
+      emit_insn (gen_cmphi (op, const0_rtx));
+      emit_insn (gen_sxt_cc0_in (op));
+    }
+  else if (n <= -15)
+    {
+      emit_insn (gen_andhi3 (op, op, gen_int_mode (0x8000, HImode)));
+      emit_insn (gen_aslhi_carry_out (op));
+      emit_insn (gen_subhi_carry_in (op));
+    }
+  else if (n == 15 && (!TARGET_40_PLUS || optimize_insn_for_speed_p ()))
+    {
+      /* According to pdp11/45 instruction timing, this sequence
+	 is 5.56us vs 7.28us for "ash $15,r".  Use when optimizing
+	 for speed, even if ash is available.  */
+      emit_insn (gen_andhi3 (op, op, const1_rtx));
+      emit_insn (gen_asrhi_carry_out (op));
+      emit_insn (gen_rorhi_carry_in (op));
+    }
+  else if (TARGET_40_PLUS)
+    FAIL;
+  else
+    {
+      /* Arithmetic right shift on the pdp works by negating the shift
+	 count; support that as input from other shift ops.  */
+      shift = const1_rtx;
+      if (n < 0)
 	{
-	  emit_insn (gen_cmphi (op, const0_rtx));
-	  emit_insn (gen_sxt_cc0_in (op));
-	  DONE;
+	  shift = constm1_rtx;
+	  n = -n;
 	}
-      FAIL;
+      for (i = 0; i < n; ++i)
+	emit_insn (gen_ashlhi3 (op, op, shift));
     }
-
-  /* Arithmetic right shift on the pdp works by negating the shift
-     count; support that as input from other shift ops.  */
-  shift = const1_rtx;
-  if (n < 0)
-    {
-      shift = constm1_rtx;
-      n = -n;
-    }
-
-  for (i = 0; i < n; ++i)
-    emit_insn (gen_ashlhi3 (op, op, shift));
   DONE;
 })
 
@@ -1160,8 +1138,14 @@
     emit_move_insn (op, const0_rtx);
   else if (n == 8)
     {
-      emit_insn (gen_bswaphi2 (operands[0], operands[0]));
-      emit_insn (gen_andhi3 (operands[0], operands[0], GEN_INT (0xff)));
+      emit_insn (gen_bswaphi2 (op, op));
+      emit_insn (gen_andhi3 (op, op, GEN_INT (0xff)));
+    }
+  else if (n == 15)
+    {
+      emit_insn (gen_andhi3 (op, op, gen_int_mode (0x8000, HImode)));
+      emit_insn (gen_aslhi_carry_out (op));
+      emit_insn (gen_rolhi_carry_in (op));
     }
   else if (TARGET_40_PLUS && n >= 2)
     {

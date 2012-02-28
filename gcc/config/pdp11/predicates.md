@@ -28,7 +28,8 @@
   (and (match_code "const_int")
        (ior (match_test "TARGET_40_PLUS")
 	    (match_test "IN_RANGE (INTVAL (op), -4, 4)")
-	    (match_test "INTVAL (op) == 8 || INTVAL (op) == -8"))))
+	    (match_test "INTVAL (op) == 8 || INTVAL (op) == -8")
+	    (match_test "INTVAL (op) == 15 || INTVAL (op) == -15"))))
 
 (define_predicate "shifthi_operand"
   (ior (and (match_test "TARGET_40_PLUS")

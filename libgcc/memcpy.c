@@ -1,6 +1,8 @@
 /* Public domain.  */
 #include <stddef.h>
 
+extern void * memcpy (void *dest, const void *src, size_t len);
+
 void *
 memcpy (void *dest, const void *src, size_t len)
 {

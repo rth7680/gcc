@@ -21,7 +21,9 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
-long udivmodsi4 ();
+extern unsigned long __udivmodsi4(unsigned long, unsigned long, int);
+extern long __divsi3 (long a, long b);
+extern long __modsi3 (long a, long b);
 
 long
 __divsi3 (long a, long b)
@@ -32,16 +34,16 @@ __divsi3 (long a, long b)
   if (a < 0)
     {
       a = -a;
-      neg = !neg;
+      neg = ~neg;
     }
 
   if (b < 0)
     {
       b = -b;
-      neg = !neg;
+      neg = ~neg;
     }
 
-  res = udivmodsi4 (a, b, 0);
+  res = __udivmodsi4 (a, b, 0);
 
   if (neg)
     res = -res;
@@ -58,13 +60,13 @@ __modsi3 (long a, long b)
   if (a < 0)
     {
       a = -a;
-      neg = 1;
+      neg = ~neg;
     }
 
   if (b < 0)
     b = -b;
 
-  res = udivmodsi4 (a, b, 1);
+  res = __udivmodsi4 (a, b, 1);
 
   if (neg)
     res = -res;

@@ -21,8 +21,10 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
+extern unsigned long __udivmodsi4(unsigned long, unsigned long, int);
+
 unsigned long
-udivmodsi4(unsigned long num, unsigned long den, int modwanted)
+__udivmodsi4(unsigned long num, unsigned long den, int modwanted)
 {
   unsigned long bit = 1;
   unsigned long res = 0;

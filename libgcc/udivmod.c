@@ -21,17 +21,19 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
-long udivmodsi4 ();
+extern unsigned long __udivmodsi4(unsigned long, unsigned long, int);
+extern unsigned long __udivsi3 (unsigned long a, unsigned long b);
+extern unsigned long __umodsi3 (unsigned long a, unsigned long b);
 
-long
-__udivsi3 (long a, long b)
+unsigned long
+__udivsi3 (unsigned long a, unsigned long b)
 {
-  return udivmodsi4 (a, b, 0);
+  return __udivmodsi4 (a, b, 0);
 }
 
-long
-__umodsi3 (long a, long b)
+unsigned long
+__umodsi3 (unsigned long a, unsigned long b)
 {
-  return udivmodsi4 (a, b, 1);
+  return __udivmodsi4 (a, b, 1);
 }
 

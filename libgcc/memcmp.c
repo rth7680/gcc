@@ -1,6 +1,8 @@
 /* Public domain.  */
 #include <stddef.h>
 
+extern int memcmp (const void *str1, const void *str2, size_t count);
+
 int
 memcmp (const void *str1, const void *str2, size_t count)
 {

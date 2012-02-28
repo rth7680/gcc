@@ -1,6 +1,8 @@
 /* Public domain.  */
 #include <stddef.h>
 
+extern void * memmove (void *dest, const void *src, size_t len);
+
 void *
 memmove (void *dest, const void *src, size_t len)
 {
@@ -11,10 +13,10 @@ memmove (void *dest, const void *src, size_t len)
       *d++ = *s++;
   else
     {
-      char *lasts = s + (len-1);
-      char *lastd = d + (len-1);
+      s += len;
+      d += len;
       while (len--)
-        *lastd-- = *lasts--;
+        *--d = *--s;
     }
   return dest;
 }

@@ -520,17 +520,33 @@
 ;; Without these patterns, optabs.c will try to use shifts, not ands.
 
 (define_insn_and_split "zero_extendqihi2"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=r,o")
-	(zero_extend:HI (match_operand:QI 1 "general_operand" "0,0")))]
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=r,o,?r")
+	(zero_extend:HI (match_operand:QI 1 "general_operand" "0,0,m")))]
   ""
   "#"
   "reload_completed"
   [(const_int 0)]
 {
-  if (REG_P (operands[0]))
-    emit_insn (gen_andhi3 (operands[0], operands[0], GEN_INT (0xff)));
-  else
-    emit_move_insn (adjust_address (operands[0], QImode, 1), const0_rtx);
+  rtx op0 = operands[0];
+  rtx op1 = operands[1];
+
+  if (MEM_P (op0))
+    {
+      emit_move_insn (adjust_address (op0, QImode, 1), const0_rtx);
+      DONE;
+    }
+  if (MEM_P (op1))
+    {
+      if (reg_overlap_mentioned_p (op0, op1))
+	emit_move_insn (gen_lowpart (QImode, op0), op1);
+      else
+	{
+	  emit_move_insn (op0, const0_rtx);
+	  emit_insn (gen_iorqi_zxt (op0, op0, op1));
+	  DONE;
+	}
+    }
+  emit_insn (gen_andhi3 (op0, op0, GEN_INT (0xff)));
   DONE;
 })
 
@@ -973,6 +989,14 @@
 		 (match_operand:I12 2 "general_operand" "g")))]
   ""
   "bis<isfx> %2, %0"
+  [(set_attr "extra_word_ops" "op02")])
+
+(define_insn "iorqi_zxt"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(ior:HI (zero_extend:HI (match_operand:QI 2 "general_operand" "g"))
+		(match_operand:HI 1 "general_operand" "0")))]
+  ""
+  "bisb %2, %0"
   [(set_attr "extra_word_ops" "op02")])
 
 ;;- xor instructions

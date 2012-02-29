@@ -1215,8 +1215,8 @@
     emit_move_insn (op, const0_rtx);
   else if (n == 8)
     {
+      emit_insn (gen_andhi3 (op, op, gen_int_mode (0xff00, HImode)));
       emit_insn (gen_bswaphi2 (op, op));
-      emit_insn (gen_andhi3 (op, op, GEN_INT (0xff)));
     }
   else if (n == 15)
     {

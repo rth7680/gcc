@@ -908,33 +908,38 @@ extern UDItype __umulsidi3 (USItype, USItype);
 	  __s.ll = __a.ll - __b.ll;			\
 	  (sl) = __s.s.low; (sh) = __s.s.high;		\
 	} while (0)
+/* We use BHI instead of BCC in the loops below to
+   avoid infinite loop for undefined input of 0.  */
 #  define count_leading_zeros16(C,X) \
-	do {						\
-	  UHItype __x = (X);				\
-	  if (!(__x & 0xff00)) __x <<= 8, C += 8;	\
-	  if (!(__x & 0xf000)) __x <<= 4, C += 4;	\
-	  if (!(__x & 0xc000)) __x <<= 2, C += 2;	\
-	  if (!(__x & 0x8000)) C += 1;			\
-	} while (0)
-#  define count_trailing_zeros16(C,X) \
-	do {						\
-	  UHItype __x = (X);				\
-	  __x = __x & ~(__x - 1); /* __x & -__x */	\
-	  if (__x & 0xff00) C += 8;			\
-	  if (__x & 0xf0f0) C += 4;			\
-	  if (__x & 0xcccc) C += 2;			\
-	  if (__x & 0xaaaa) C += 1;			\
-	} while (0)
+	({ UHItype __x = (X), __c = (C);		\
+	   asm ("bit $-0400, %1\n\t"			\
+		"bne 0f\n\t"				\
+		"swab %1\n\t"				\
+		"add $4, %0\n"				\
+	   "0:	inc %0\n\t"				\
+		"asl %1\n\t"				\
+		"bhi 0b\n\t"				\
+		: "+r"(__c), "+r"(__x));		\
+	   __c - 1; })
+#  define count_trailing_zeros16(C, X) \
+	({ UHItype __x = (X), __c = (C);		\
+	   asm ("bit $0377, %1\n\t"			\
+		"bne 0f\n\t"				\
+		"swab %1\n\t"				\
+		"add $4, %0\n"				\
+	   "0:	inc %0\n\t"				\
+		"asr %1\n\t"				\
+		"bhi 0b\n\t"				\
+		: "+r"(__c), "+r"(__x));		\
+	   __c - 1; })
 # if W_TYPE_SIZE == 16
 #  define count_leading_zeros(COUNT,X) \
 	do {						\
-	  COUNT = 0;					\
-	  count_leading_zeros16 (COUNT, X);		\
+	  COUNT = count_leading_zeros16 (0, X);		\
 	} while (0)
 #  define count_trailing_zeros(COUNT,X) \
 	do {						\
-	  COUNT = 0;					\
-	  count_trailing_zeros16 (COUNT, X);		\
+	  COUNT = count_trailing_zeros16 (0, X);	\
 	} while (0)
 #  if (defined(__pdp11_40__) || defined(__pdp11_45__))
 #   define smul_ppmm(w1, w0, u, v) \
@@ -955,18 +960,18 @@ extern UDItype __umulsidi3 (USItype, USItype);
 #  define count_leading_zeros(COUNT,X) \
 	do {						\
 	  union { USItype ll; UHItype i[2]; } __u;	\
-	  UHItype __h;					\
-	  __u.ll = (X); __h = __u.i[0]; COUNT = 0;	\
-	  if (__h == 0) __h = __u.i[1], COUNT = 16;	\
-	  count_leading_zeros16 (COUNT, __h);		\
+	  UHItype __h, __l;				\
+	  __u.ll = (X); __h = __u.i[0]; __l = 0;	\
+	  if (__h == 0) __h = __u.i[1], __l = 16;	\
+	  COUNT = count_leading_zeros16 (__l, __h);	\
 	} while (0)
 #  define count_trailing_zeros(COUNT,X) \
 	do {						\
 	  union { USItype ll; UHItype i[2]; } __u;	\
-	  UHItype __h;					\
-	  __u.ll = (X); __h = __u.i[1];	COUNT = 0;	\
-	  if (__h == 0) __h = __u.i[0], COUNT = 16;	\
-	  count_trailing_zeros16 (COUNT, __h);		\
+	  UHItype __h, __l;				\
+	  __u.ll = (X); __h = __u.i[1];	__l = 0;	\
+	  if (__h == 0) __h = __u.i[0], __l = 16;	\
+	  COUNT = count_trailing_zeros16 (__l, __h);	\
 	} while (0)
 # endif /* W_TYPE_SIZE */
 #endif /* __pdp11__ */

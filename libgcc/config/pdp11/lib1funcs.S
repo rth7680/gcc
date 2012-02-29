@@ -967,3 +967,305 @@ FUNC	GLOBAL(modhi3)
 
 ENDF	GLOBAL(modhi3)
 #endif /* L_modhi3 */
+
+/*----------------------------------------------------------------------
+ * Misc bit manipulation routines.
+ *----------------------------------------------------------------------*/
+
+#ifdef L_bswapsi2
+FUNC	GLOBAL(bswapsi2)
+
+	mov	02(sp), r1
+	mov	04(sp), r0
+	swab	r1
+	swab	r0
+	rts	pc
+
+ENDF	GLOBAL(bswapsi2)
+#endif /* L_bswapsi2 */
+
+#ifdef L_bswapdi2
+FUNC	GLOBAL(bswapdi2)
+
+	mov	02(sp), r0
+	mov	012(sp), r1
+	swab	r1
+	mov	r1, (r0)+
+	mov	010(sp), r1
+	swab	r1
+	mov	r1, (r0)+
+	mov	06(sp), r1
+	swab	r1
+	mov	r1, (r0)+
+	mov	04(sp), r1
+	swab	r1
+	mov	r1, (r0)
+	rts	pc
+
+ENDF    GLOBAL(bswapdi2)
+#endif /* L_bswapdi2 */
+
+#ifdef L_popcounthi2
+FUNC	GLOBAL(popcounthi2)
+
+#ifdef __OPTIMIZE_SIZE__
+	mov	2(sp), r1
+	clr	r0		/* clear output and clear carry */
+0:	adc	r0
+	asl	r1
+	bne	0b		/* 3.74us/loop */
+	adc	r0		/* 5.72us min; 61.82us max */
+	rts	pc
+#elif 1
+	mov	2(sp), r0
+	mov	r0, r1
+	asr	r0
+	bic	$0125252, r0
+	sub	r0, r1		/* 8 2-bit fields */
+
+	mov	r1, r0
+	asr	r1
+	asr	r1
+	bic	$0146314, r0
+	bic	$0146314, r1
+	add	r0, r1		/* 4 4-bit fields */
+
+	mov	r1, r0
+	asr	r1
+	asr	r1
+	asr	r1
+	asr	r1
+	bic	$0170360, r0
+	bic	$0170360, r1
+	add	r0, r1		/* 2 8-bit fields */
+
+	mov	r1, r0		/* sum into a single field  */
+	bic	$-0400, r0
+	clrb	r1
+	swab	r1
+	add	r1, r0		/* 37.01us */
+	rts	pc
+#else
+	mov	2(sp), r0
+	mov	r2, -(sp)
+	clr	r2
+0:	mov	r0, r1
+	bic	$-020, r1
+	movb	$GLOBAL(__popcount_tab)(r1), r1
+	add	r1, r2		/* carry must be clear */
+	ror	r0
+	asr	r0
+	asr	r0
+	asr	r0
+	bne	0b		/* 15.06us/loop */
+	mov	r2, r0
+	mov	(sp)+ r2	/* 21.2us min; 66.38us max */
+	rts	pc
+#endif /* SIZE */
+
+ENDF	GLOBAL(popcounthi2)
+#endif /* L_popcounthi2 */
+
+#ifdef L_popcountsi2
+FUNC	GLOBAL(popcountsi2)
+
+#ifdef __OPTIMIZE_SIZE__
+	mov	2(sp), r0			/* cfa = sp+2 */
+	mov	r0, -(sp)			/*     = sp+4 */
+	jsr	pc, GLOBAL(popcounthi2)
+	mov	r0, -(sp)			/*     = sp+6; sum = cfa-6 */
+	mov	010(sp), r0			/* w[1] = cfa+2 = sp+8 */
+	mov	r0, -(sp)			/*     = sp+8 */
+	jsr	pc, GLOBAL(popcounthi2)
+	add	2(sp), r0
+	add	$6, sp
+	rts	pc
+#else
+	mov	r2, -(sp)
+	mov	r3, -(sp)
+	mov	010(sp), r0
+	mov	012(sp), r1
+
+	mov	r0, r2
+	mov	r1, r3
+	asr	r0
+	ror	r1
+	bic	$0125252, r0
+	bic	$0125252, r1
+	sub	r0, r2
+	sub	r1, r3
+	sbc	r2		/* 16 2-bit fields, max value 2 */
+
+	mov	r2, r0
+	mov	r3, r1
+	asr	r0
+	ror	r1
+	asr	r0
+	ror	r1
+	bic	$0146314, r0
+	bic	$0146314, r1
+	bic	$0146314, r2
+	bic	$0146314, r3
+	add	r1, r0
+	add	r2, r0
+	add	r3, r0		/* 4 4-bit fields, max value 8 */
+
+	mov	r0, r1
+	asr	r0
+	asr	r0
+	asr	r0
+	asr	r0
+	bic	$0170360, r0
+	bic	$0170360, r1
+	add	r0, r1		/* 2 8-bit fields, max value 16 */
+
+	mov	r1, r0
+	bic	$-0400, r0
+	clrb	r1
+	swab	r1
+	add	r1, r0
+
+	mov	(sp)+, r3
+	mov	(sp)+, r2
+	rts	pc
+#endif /* SIZE */
+
+ENDF	GLOBAL(popcountsi2)
+#endif /* L_popcountsi2 */
+
+#ifdef L_popcountdi2
+FUNC	GLOBAL(popcountdi2)
+
+	mov	2(sp), r0			/* w[0] = cfa = sp+2 */
+	mov	r2, -(sp)			/* cfa = sp+4 */
+	mov	r0, -(sp)			/* cfa = sp+6 */
+	jsr	pc, GLOBAL(popcounthi2)
+	mov	r0, r2
+	mov	010(sp), (sp)			/* w[1] = cfa+2 = sp+8 */
+	jsr	pc, GLOBAL(popcounthi2)
+	add	r0, r2
+	mov	012(sp), (sp)			/* w[2] = cfa+4 = sp+10 */
+	jsr	pc, GLOBAL(popcounthi2)
+	add	r0, r2
+	mov	014(sp), (sp)			/* w[3] = cfa+6 = sp+12 */
+	jsr	pc, GLOBAL(popcounthi2)
+	add	r2, r0
+	mov	(sp)+, r2			/* discard function arg */
+	mov	(sp)+, r2
+	rts	pc
+
+ENDF	GLOBAL(popcountdi2)
+#endif /* L_popcountdi2 */
+
+#ifdef L_parityhi2
+FUNC	GLOBAL(parityhi2)
+
+#ifdef __OPTIMIZE_SIZE__
+	mov	2(sp), r1
+	mov	r1, r0
+	clc
+	ror	r1
+0:	add	r1, r0
+	asr	r1
+	bne	0b		/* 4us/loop */
+	bic	$-2, r0		/* 11.32us min; 71.32us max */
+	rts	pc
+#else
+
+	mov	2(sp), r0
+
+#if !HAVE_ASHC
+	mov	r2, -(sp)
+.macro	xor	x, y
+	mov	\y, r2
+	bic	\x, \y
+	bic	r2, \x
+	bis	\x, \y
+.endm
+#endif
+
+	/* Left shifts are quicker than right shifts; accumulate to msb.  */
+	mov	r0, r1
+	swab	r1
+	xor	r1, r0
+
+	mov	r0, r1
+	asl	r1
+	asl	r1
+	asl	r1
+	asl	r1
+	xor	r1, r0
+
+	mov	r0, r1
+	asl	r1
+	asl	r1
+	xor	r1, r0
+
+	mov	r0, r1
+	asl	r1
+	xor	r0, r1
+
+	clr	r0		/* move high bit of r1 to low bit of r0 */
+	rol	r1
+	rol	r0		/* 18.81us */
+
+#if !HAVE_ASHC
+	mov	(sp)+, r2
+#endif
+
+	rts	pc
+#endif /* SIZE */
+ENDF	GLOBAL(parityhi2)
+#endif /* L_parityhi2 */
+
+#ifdef L_paritysi2
+FUNC	GLOBAL(paritysi2)
+
+#if HAVE_ASHC
+	mov	2(sp), r0
+	mov	4(sp), r1
+	xor	r1, r0
+#else
+	mov	2(sp), r0
+	mov	4(sp), r1
+	bic	r0, r1
+	bic	4(sp), r1
+	bis	r1, r0
+#endif /* ASHC */
+	mov	r0, 2(sp)
+	jmp	GLOBAL(parityhi2)
+
+ENDF	GLOBAL(paritysi2)
+#endif /* L_paritysi2 */
+
+#ifdef L_paritydi2
+FUNC	GLOBAL(paritydi2)
+
+#if HAVE_ASHC
+	mov	2(sp), r0
+	mov	4(sp), r1
+	xor	r1, r0
+	mov	6(sp), r1
+	xor	r1, r0
+	mov	010(sp), r1
+	xor	r1, r0
+#else
+	mov	2(sp), r0
+	mov	4(sp), r1
+	bic	r0, r1
+	bic	4(sp), r0
+	bis	r1, r0
+	mov	6(sp), r1
+	bic	r0, r1
+	bic	6(sp), r0
+	bis	r1, r0
+	mov	010(sp), r1
+	bic	r0, r1
+	bic	010(sp), r0
+	bis	r1, r0
+#endif /* ASHC */
+	mov	r0, 2(sp)
+	jmp	GLOBAL(parityhi2)
+
+ENDF	GLOBAL(paritydi2)
+#endif /* L_paritydi2 */

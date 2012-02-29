@@ -909,28 +909,46 @@
 
 (define_expand "and<mode>3"
   [(set (match_operand:I12 0 "nonimmediate_operand" "")
-	(and:I12 (not:I12 (match_operand:I12 1 "general_operand" ""))
+	(and:I12 (match_operand:I12 1 "general_operand" "")
 		 (match_operand:I12 2 "general_operand" "")))]
   ""
 {
+  rtx op0 = operands[0];
   rtx op1 = operands[1];
+  rtx op2 = operands[2];
 
-  /* If there is a constant argument, complement that one.
-     Similarly, if one of the inputs is the same as the output,
-     complement the other input.  */
-  if ((CONST_INT_P (operands[2]) && ! CONST_INT_P (op1))
-      || rtx_equal_p (operands[0], operands[1]))
+  if (CONST_INT_P (op2))
+    ;
+  else if (CONST_INT_P (op1))
     {
-      operands[1] = operands[2];
+      operands[1] = op2;
       operands[2] = op1;
-      op1 = operands[1];
     }
-
-  if (CONST_INT_P (op1))
-    operands[1] = GEN_INT (~INTVAL (op1));
   else
-    operands[1] = expand_unop (<MODE>mode, one_cmpl_optab, op1, 0, 1);
+    {
+      /* Similarly, if one of the inputs is the same as the output,
+	 complement the other input.  */
+      if (rtx_equal_p (op0, op1))
+	;
+      else if (rtx_equal_p (op0, op2))
+	{
+	  op1 = op2;
+	  op2 = operands[1];
+	}
+      op2 = expand_unop (<MODE>mode, one_cmpl_optab, op2, NULL_RTX, 1);
+      emit_insn (gen_bic<mode>3 (operands[0], op1, op2));
+      DONE;
+    }
 })
+
+(define_insn "*and<mode>3_const"
+  [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
+	(and:I12
+	  (match_operand:I12 1 "general_operand" "0")
+	  (match_operand:I12 2 "const_int_operand" "n")))]
+  ""
+  "bic<isfx> %C2, %0"
+  [(set_attr "extra_word_ops" "op02")])
 
 (define_insn "bic<mode>3"
   [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
@@ -1154,7 +1172,7 @@
   else if (TARGET_40_PLUS && n >= 2)
     {
       emit_insn (gen_ashlhi3 (op, op, GEN_INT (-n)));
-      emit_insn (gen_bichi3 (op, op, GEN_INT (~(0xffff >> n))));
+      emit_insn (gen_andhi3 (op, op, GEN_INT (0xffff >> n)));
     }
   else
     {
@@ -1256,7 +1274,7 @@
       else
 	{
 	  emit_insn (gen_ashlsi3 (op, op, GEN_INT (-n)));
-	  emit_insn (gen_bichi3 (hi, hi, GEN_INT (~(0xffff >> n))));
+	  emit_insn (gen_andhi3 (hi, hi, GEN_INT (0xffff >> n)));
 	}
     }
   else

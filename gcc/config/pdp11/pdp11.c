@@ -143,6 +143,7 @@ decode_pdp11_d (const struct real_format *fmt ATTRIBUTE_UNUSED,
 /* This is where the condition code register lives.  */
 /* rtx cc0_reg_rtx; - no longer needed? */
 
+static void output_int_const (FILE *file, HOST_WIDE_INT i);
 static bool pdp11_assemble_integer (rtx, unsigned int, int);
 static bool pdp11_rtx_costs (rtx, int, int, int, int *, bool);
 static bool pdp11_return_in_memory (const_tree, const_tree);
@@ -723,7 +724,15 @@ pdp11_asm_print_operand (FILE *file, rtx x, int code)
   else
     {
       putc ('$', file);
-      output_addr_const_pdp11 (file, x);
+      if (CONST_INT_P (x))
+	{
+	  HOST_WIDE_INT i = INTVAL (x);
+	  if (code == 'C')
+	    i = ~i;
+	  output_int_const (file, i);
+	}
+      else
+	output_addr_const_pdp11 (file, x);
     }
 }
 
@@ -836,8 +845,7 @@ pdp11_assemble_integer (rtx x, unsigned int size, int aligned_p)
       {
       case 1:
 	fprintf (asm_out_file, "\t.byte\t");
-	output_addr_const_pdp11 (asm_out_file, GEN_INT (INTVAL (x) & 0xff));
-;
+	output_int_const (asm_out_file, INTVAL (x) & 0xff);
 	fprintf (asm_out_file, " /* char */\n");
 	return true;
 
@@ -1564,12 +1572,22 @@ pdp11_initial_elimination_offset (int from, int to)
    use, and for debugging output, which we don't support with this port either.
    So this copy should get called whenever needed.
 */
+static void
+output_int_const (FILE *file, HOST_WIDE_INT i)
+{
+  if (i < 0)
+    {
+      i = -i;
+      fprintf (file, "-");
+    }
+  fprintf (file, "%#o", (int)i & 0xffff);
+}
+
 void
 output_addr_const_pdp11 (FILE *file, rtx x)
 {
-  char buf[256];
-  int i;
-  
+  char buf[16];
+
  restart:
   switch (GET_CODE (x))
     {
@@ -1593,13 +1611,7 @@ output_addr_const_pdp11 (FILE *file, rtx x)
       break;
 
     case CONST_INT:
-      i = INTVAL (x);
-      if (i < 0)
-	{
-	  i = -i;
-	  fprintf (file, "-");
-	}
-      fprintf (file, "%#o", i & 0xffff);
+      output_int_const (file, INTVAL (x));
       break;
 
     case CONST:

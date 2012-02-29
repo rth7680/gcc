@@ -941,11 +941,18 @@
     }
 })
 
+(define_insn "*andhi3_ff00"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(and:HI (match_operand:HI 1 "general_operand" "0")
+		(const_int -256)))]
+  ""
+  "clrb %0"
+  [(set_attr "extra_word_ops" "op0")])
+
 (define_insn "*and<mode>3_const"
   [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")
-	(and:I12
-	  (match_operand:I12 1 "general_operand" "0")
-	  (match_operand:I12 2 "const_int_operand" "n")))]
+	(and:I12 (match_operand:I12 1 "general_operand" "0")
+		 (match_operand:I12 2 "const_int_operand" "n")))]
   ""
   "bic<isfx> %C2, %0"
   [(set_attr "extra_word_ops" "op02")])
@@ -977,10 +984,25 @@
 {
   if (!TARGET_40_PLUS)
     {
-      rtx op1, op2, t1, t2;
+      rtx op1 = operands[1], op2 = operands[2], t1, t2;
 
-      op1 = force_reg (HImode, operands[1]);
-      op2 = force_reg (HImode, operands[2]);
+      if (CONST_INT_P (op2))
+	{
+	  HOST_WIDE_INT i = INTVAL (op2);
+	  if (i == 0xff)
+	    goto doit;
+	  if (i == 0xff00)
+	    {
+	      t1 = gen_reg_rtx (HImode);
+	      emit_insn (gen_one_cmplhi2 (t1, op1));
+	      operands[1] = t1;
+	      operands[2] = GEN_INT (0xff);
+	      goto doit;
+	    }
+	}
+
+      op1 = force_reg (HImode, op1);
+      op2 = force_reg (HImode, op2);
       t1 = gen_reg_rtx (HImode);
       t2 = gen_reg_rtx (HImode);
 
@@ -989,7 +1011,16 @@
       emit_insn (gen_iorhi3 (operands[0], t1, t2));
       DONE;
     }
+ doit:;
 })
+
+(define_insn "*xorhi3_00ff"
+  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+	(xor:HI (match_operand:HI 1 "general_operand" "0")
+		(const_int 255)))]
+  ""
+  "comb %0"
+  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "*xorhi3"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")

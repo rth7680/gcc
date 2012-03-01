@@ -441,8 +441,6 @@ pdp11_expand_epilogue (void)
       x = gen_frame_mem (Pmode, x);
       emit_move_insn (hard_frame_pointer_rtx, x);
     }
-
-  emit_jump_insn (gen_return ());
 }
 
 /* Expand multi-word operands (SImode or DImode) into the 2 or 4
@@ -1942,5 +1940,20 @@ pdp11_expand_branch (enum rtx_code code, rtx op0, rtx op1, rtx lab)
 
   gcc_unreachable ();
 }
+
+/* Implement TARGET_FUNCTION_OK_FOR_SIBCALL_P.  */
+
+static bool
+pdp11_ok_for_sibcall_p (tree decl, tree exp ATTRIBUTE_UNUSED)
+{
+  /* Can't do indirect tail calls, since we havn't set up a call-clobbered
+     register class.  */
+  if (!decl)
+    return false;
+  return true;
+}
+
+#undef TARGET_FUNCTION_OK_FOR_SIBCALL
+#define TARGET_FUNCTION_OK_FOR_SIBCALL pdp11_ok_for_sibcall_p
 
 struct gcc_target targetm = TARGET_INITIALIZER;

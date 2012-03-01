@@ -163,6 +163,13 @@
 })
 
 (define_expand "epilogue"
+  [(return)]
+  ""
+{
+  pdp11_expand_epilogue ();
+})
+
+(define_expand "sibcall_epilogue"
   [(const_int 0)]
   ""
 {
@@ -1528,20 +1535,58 @@
 
 ;;- jump to subroutine
 
-(define_insn "call"
+(define_expand "call"
+  [(call (match_operand:HI 0 "memory_operand" "")
+	 (match_operand:HI 1 "" ""))]
+  "")
+
+(define_expand "call_value"
+  [(set (match_operand 0 "" "")
+	(call (match_operand:HI 1 "memory_operand" "")
+	      (match_operand:HI 2 "" "")))]
+  "")
+
+(define_expand "sibcall"
+  [(call (match_operand:HI 0 "memory_operand" "")
+	 (match_operand 1 "" ""))]
+  "")
+
+(define_expand "sibcall_value"
+  [(set (match_operand 0 "" "")
+	(call (match_operand:HI 1 "memory_operand" "")
+	      (match_operand 2 "" "")))]
+  "")
+
+(define_insn "*call"
   [(call (match_operand:HI 0 "memory_operand" "m")
 	 (match_operand:HI 1 "" ""))]
-  ""
+  "!SIBLING_CALL_P (insn)"
   "jsr pc, %0"
   [(set_attr "extra_word_ops" "op0")])
 
-;;- jump to subroutine
-(define_insn "call_value"
+(define_insn "*call_value"
   [(set (match_operand 0 "" "")
 	(call (match_operand:HI 1 "memory_operand" "m")
 	      (match_operand:HI 2 "" "")))]
-  ""
+  "!SIBLING_CALL_P (insn)"
   "jsr pc, %1"
+  [(set_attr "extra_word_ops" "op1")])
+
+;; ??? With an R0/R1 register class, we could allow indirect sibcalls.
+;; ??? We could also allow the indirect memory forms, e.g. *global_ptr.
+(define_insn "*sibcall"
+  [(call (mem:HI (match_operand:HI 0 "immediate_operand" "i"))
+	 (match_operand 1 "" ""))]
+  "SIBLING_CALL_P (insn)"
+  "jmp %c0"
+  [(set_attr "extra_word_ops" "op0")])
+
+(define_insn "*sibcall_value"
+  [(set (match_operand 0 "" "")
+	(call (mem:HI (match_operand:HI 1 "immediate_operand" "i"))
+	      (match_operand 2 "" "")))]
+  "SIBLING_CALL_P (insn)"
+  "jmp %c1"
   [(set_attr "extra_word_ops" "op1")])
 
 ;;- nop instruction

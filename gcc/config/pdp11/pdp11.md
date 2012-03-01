@@ -163,7 +163,7 @@
 })
 
 (define_expand "epilogue"
-  [(return)]
+  [(simple_return)]
   ""
 {
   pdp11_expand_epilogue ();
@@ -178,12 +178,12 @@
 })
 
 (define_expand "return"
-  [(return)]
+  [(simple_return)]
   "reload_completed && !frame_pointer_needed && pdp11_sp_frame_offset () == 0"
   "")
 
-(define_insn "*rts"
-  [(return)]
+(define_insn "simple_return"
+  [(simple_return)]
   ""
   "rts pc")
 

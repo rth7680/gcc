@@ -908,28 +908,31 @@ extern UDItype __umulsidi3 (USItype, USItype);
 	  __s.ll = __a.ll - __b.ll;			\
 	  (sl) = __s.s.low; (sh) = __s.s.high;		\
 	} while (0)
-/* We use BHI instead of BCC in the loops below to
-   avoid infinite loop for undefined input of 0.  */
 #  define count_leading_zeros16(C,X) \
 	({ UHItype __x = (X), __c = (C);		\
 	   asm ("bit $-0400, %1\n\t"			\
-		"bne 0f\n\t"				\
+		"bne 1f\n\t"				\
 		"swab %1\n\t"				\
-		"add $4, %0\n"				\
+		"add $4, %0\n\t"			\
+		"tst %1\n\t"				\
+		"ble 2f\n"				\
 	   "0:	inc %0\n\t"				\
-		"asl %1\n\t"				\
-		"bhi 0b\n\t"				\
+		"asl %1\n"				\
+	   "1:	bpl 0b\n"				\
+	   "2:"						\
 		: "+r"(__c), "+r"(__x));		\
-	   __c - 1; })
+	   __c; })
 #  define count_trailing_zeros16(C, X) \
 	({ UHItype __x = (X), __c = (C);		\
-	   asm ("bit $0377, %1\n\t"			\
+	   asm ("tstb %1\n\t"				\
 		"bne 0f\n\t"				\
+		"add $4, %0\n\t"			\
 		"swab %1\n\t"				\
-		"add $4, %0\n"				\
+		"beq 1f\n"				\
 	   "0:	inc %0\n\t"				\
 		"asr %1\n\t"				\
-		"bhi 0b\n\t"				\
+		"bcc 0b\n"				\
+	   "1:"						\
 		: "+r"(__c), "+r"(__x));		\
 	   __c - 1; })
 # if W_TYPE_SIZE == 16
@@ -945,7 +948,7 @@ extern UDItype __umulsidi3 (USItype, USItype);
 #   define smul_ppmm(w1, w0, u, v) \
 	do {						\
 	  DWunion __w;					\
-	  __w.ll = (long)(int)(u) * (int)(v);		\
+	  __w.ll = (SItype)(HItype)(u) * (HItype)(v);	\
 	  (w1) = __w.s.high; (w0) = __w.s.low;		\
 	} while (0)
 #   define sdiv_qrnnd(q, r, nh, nl, d) \

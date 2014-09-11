@@ -663,12 +663,6 @@ extern rtx cc0_reg_rtx;
 #define TRAMPOLINE_SIZE 8
 #define TRAMPOLINE_ALIGNMENT 16
 
-/* there is no point in avoiding branches on a pdp, 
-   since branches are really cheap - I just want to find out
-   how much difference the BRANCH_COST macro makes in code */
-#define BRANCH_COST(speed_p, predictable_p) (TARGET_BRANCH_CHEAP ? 0 : 1)
-
-
 #define COMPARE_FLAG_MODE HImode
 
 #define TARGET_HAVE_NAMED_SECTIONS false

@@ -1843,7 +1843,6 @@ void
 pdp11_expand_branch (enum rtx_code code, rtx op0, rtx op1, rtx lab)
 {
   enum machine_mode mode;
-  int ofs;
   rtx x;
 
   if (CONSTANT_P (op0) && !CONSTANT_P (op1))

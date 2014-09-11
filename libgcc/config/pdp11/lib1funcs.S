@@ -114,6 +114,7 @@ FUNC	GLOBAL(lshrhi3)
 	mov	02(sp), r1
 	neg	04(sp)
 	ashc	04(sp), r0
+	mov	r1, r0
 #else
 	mov	02(sp),r0	/* load data */
 	mov	04(sp),r1	/* load count */
@@ -909,10 +910,9 @@ ENDF	GLOBAL(umodhi3)
 FUNC	GLOBAL(divhi3)
 
 #if HAVE_DIV
-	mov	r1, -(sp)
-	mov	r0, r1
+	mov	2(sp), r1
 	sxt	r0
-	div	(sp)+, r0
+	div	4(sp), r0
 	rts	pc
 #else
 	mov	r2, -(sp)
@@ -940,10 +940,9 @@ ENDF	GLOBAL(divhi3)
 FUNC	GLOBAL(modhi3)
 
 #if HAVE_DIV
-	mov	r1, -(sp)
-	mov	r0, r1
+	mov	2(sp), r1
 	sxt	r0
-	div	(sp)+, r0
+	div	4(sp), r0
 	mov	r1, r0
 	rts	pc
 #else

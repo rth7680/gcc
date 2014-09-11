@@ -271,13 +271,10 @@
 
 (define_expand "doloop_end"
   [(use (match_operand 0 "" ""))        ; loop pseudo
-   (use (match_operand 1 "" ""))        ; iterations; zero if unknown
-   (use (match_operand 2 "" ""))        ; max iterations
-   (use (match_operand 3 "" ""))        ; loop level
-   (use (match_operand 4 "" ""))]       ; label
+   (use (match_operand 1 "" ""))]       ; label
   "TARGET_40_PLUS"
 {
-  emit_jump_insn (gen_sob (operands[0], operands[4]));
+  emit_jump_insn (gen_sob (operands[0], operands[1]));
   DONE;
 })
 

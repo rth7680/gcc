@@ -961,13 +961,15 @@
     }
 })
 
-(define_insn "*andhi3_ff00"
-  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
-	(and:HI (match_operand:HI 1 "general_operand" "0")
-		(const_int -256)))]
-  ""
-  "clrb %0"
-  [(set_attr "extra_word_ops" "op0")])
+; ??? Need to merge with the below, disallow autoinc addressing modes,
+; and disallow the use of the condition codes.
+;(define_insn "*andhi3_ff00"
+;  [(set (match_operand:HI 0 "nonimmediate_operand" "=rm")
+;        (and:HI (match_operand:HI 1 "general_operand" "0")
+;                (const_int -256)))]
+;  ""
+;  "clrb %0"
+;  [(set_attr "extra_word_ops" "op0")])
 
 (define_insn "*and<mode>3_const"
   [(set (match_operand:I12 0 "nonimmediate_operand" "=rm")

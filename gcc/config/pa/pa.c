@@ -578,6 +578,7 @@ enum pa_builtins
   PA_BUILTIN_FABSQ,
   PA_BUILTIN_INFQ,
   PA_BUILTIN_HUGE_VALQ,
+  PA_BUILTIN_UNIT_SBZ,
   PA_BUILTIN_max
 };
 
@@ -586,17 +587,17 @@ static GTY(()) tree pa_builtins[(int) PA_BUILTIN_max];
 static void
 pa_init_builtins (void)
 {
+  tree decl, ftype;
+
 #ifdef DONT_HAVE_FPUTC_UNLOCKED
   {
-    tree decl = builtin_decl_explicit (BUILT_IN_PUTC_UNLOCKED);
+    decl = builtin_decl_explicit (BUILT_IN_PUTC_UNLOCKED);
     set_builtin_decl (BUILT_IN_FPUTC_UNLOCKED, decl,
 		      builtin_decl_implicit_p (BUILT_IN_PUTC_UNLOCKED));
   }
 #endif
 #if TARGET_HPUX_11
   {
-    tree decl;
-
     if ((decl = builtin_decl_explicit (BUILT_IN_FINITE)) != NULL_TREE)
       set_user_assembler_name (decl, "_Isfinite");
     if ((decl = builtin_decl_explicit (BUILT_IN_FINITEF)) != NULL_TREE)
@@ -606,8 +607,6 @@ pa_init_builtins (void)
 
   if (HPUX_LONG_DOUBLE_LIBRARY)
     {
-      tree decl, ftype;
-
       /* Under HPUX, the __float128 type is a synonym for "long double".  */
       (*lang_hooks.types.register_builtin_type) (long_double_type_node,
 						 "__float128");
@@ -643,6 +642,14 @@ pa_init_builtins (void)
                                    NULL, NULL_TREE);
       pa_builtins[PA_BUILTIN_HUGE_VALQ] = decl;
     }
+
+  ftype = build_function_type_list (long_unsigned_type_node,
+				    long_unsigned_type_node,
+				    NULL_TREE);
+  decl = add_builtin_function ("__builtin_unit_sbz", ftype,
+			       PA_BUILTIN_UNIT_SBZ, BUILT_IN_MD,
+                               NULL, NULL_TREE);
+  pa_builtins[PA_BUILTIN_UNIT_SBZ] = decl;
 }
 
 static rtx
@@ -675,6 +682,22 @@ pa_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 	  target = gen_reg_rtx (target_mode);
 
 	emit_move_insn (target, tmp);
+	return target;
+      }
+
+    case PA_BUILTIN_UNIT_SBZ:
+      {
+	machine_mode target_mode = TYPE_MODE (TREE_TYPE (exp));
+        rtx in = expand_expr (CALL_EXPR_ARG (exp, 0), NULL_RTX,
+			      target_mode, EXPAND_NORMAL);
+
+	if (target == NULL)
+	  target = gen_reg_rtx (target_mode);
+	if (target_mode == SImode)
+	  emit_insn (gen_unit_sbz_si (target, in));
+	else
+	  emit_insn (gen_unit_sbz_di (target, in));
+
 	return target;
       }
 
@@ -6739,6 +6762,73 @@ pa_output_cbranch (rtx *operands, int negated, rtx_insn *insn)
 	return pa_output_lbranch (operands[0], insn, xdelay);
     }
   return buf;
+}
+
+const char *
+pa_output_sbz_branch (rtx *operands, bool negated, rtx_insn *insn)
+{
+  bool useskip;
+
+  /* A conditional branch to the following instruction (e.g. the delay slot)
+     is asking for a disaster.  This can happen when not optimizing and
+     when jump optimization fails.
+
+     While it is usually safe to emit nothing, this can fail if the
+     preceding instruction is a nullified branch with an empty delay
+     slot and the same branch target as this branch.  We could check
+     for this but jump optimization should eliminate nop jumps.  It
+     is always safe to emit a nop.  */
+  if (branch_to_delay_slot_p (insn))
+    return "nop";
+
+  bool forward = forward_branch_p (insn);
+  machine_mode mode = GET_MODE (operands[1]);
+
+  int nullify = INSN_ANNULLED_BRANCH_P (insn);
+  int dbr_len = dbr_sequence_length ();
+  if (dbr_len == 0)
+    nullify = true;
+
+  int length = get_attr_length (insn);
+  switch (length)
+    {
+    case 8:
+      /* A forward branch over a single nullified insn can be done with a
+	 comclr instruction.  This avoids a single cycle penalty due to
+	 mis-predicted branch if we fall through (branch not taken).  */
+      if (nullify && use_skip_p (insn))
+	{
+	  if (mode == DImode)
+	    
+	  strcat (buf, negated ? "sbz" : "nbz");
+	  strcat (buf, " %1,%r2,%%r0");
+	}
+      else
+	{
+	  strcat (buf, negated ? "nbz" : "sbz");
+	  strcat (buf, " %1,%r2,%%r0\n\t");
+	  if (nullify)
+	    strcat (buf, "b,n %0");
+	  else
+	    strcat (buf, "b %0");
+	}
+      return buf;
+
+    default:
+      /* The reversed conditional branch must branch over one additional
+	 instruction if the delay slot is filled and needs to be extracted
+	 by pa_output_lbranch.  If the delay slot is empty or this is a
+	 nullified forward branch, the instruction after the reversed
+	 condition branch must be nullified.  */
+      operands[3] = GEN_INT (length - 4 * nullify);
+
+      strcat (buf, negated ? "sbz" : "nbz");
+      strcat (buf, " %1,%r2,%%r0\n\t");
+      strcat (buf, "b,n .+%3");
+      output_asm_insn (buf, operands);
+
+      return pa_output_lbranch (operands[0], insn, !nullify);
+    }
 }
 
 /* Output a PIC pc-relative instruction sequence to load the address of

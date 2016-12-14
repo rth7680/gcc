@@ -33,6 +33,7 @@ extern const char *pa_output_block_move (rtx *, int);
 extern const char *pa_output_block_clear (rtx *, int);
 extern const char *pa_output_cbranch (rtx *, int, rtx_insn *);
 extern const char *pa_output_lbranch (rtx, rtx_insn *, int);
+extern const char *pa_output_sbz_branch (rtx *, bool, rtx_insn *);
 extern const char *pa_output_bb (rtx *, int, rtx_insn *, int);
 extern const char *pa_output_bvb (rtx *, int, rtx_insn *, int);
 extern const char *pa_output_dbra (rtx *, rtx_insn *, int);

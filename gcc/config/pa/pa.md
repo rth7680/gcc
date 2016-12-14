@@ -85,6 +85,7 @@
    UNSPEC_TLSLDM_PIC
    UNSPEC_TLSIE_PIC
    UNSPEC_MEMORY_BARRIER
+   UNSPEC_SBZ
   ])
 
 ;; UNSPEC_VOLATILE:
@@ -10138,3 +10139,123 @@ add,l %2,%3,%3\;bv,n %%r0(%3)"
   "ldo 15(%%sp),%1\n\t{dep|depw} %%r0,31,3,%1\n\tldcw 0(%1),%1"
   [(set_attr "type" "binary")
    (set_attr "length" "12")])
+
+(define_insn "unit_sbz_<mode>"
+  [(set (match_operand:SWI 0 "register_operand" "=r")
+	(unspec:SWI [(match_operand:SWI 1 "register_operand" "r")]
+		    UNSPEC_SBZ))]
+  ""
+  "uxor,<dwc>sbz %%r0,%1,%%r0\;or,tr %%r0,%%r0,%0\;ldi 1,%0"
+  [(set_attr "type" "multi")
+   (set_attr "length" "12")])
+
+(define_insn "*uxor_sbz_<mode>"
+  [(set (match_operand:SWI 0 "register_operand" "=r")
+	(unspec:SWI [(xor:SWI
+		       (match_operand:SWI 1 "register_operand" "r")
+		       (match_operand:SWI 2 "register_operand" "r"))]
+		    UNSPEC_SBZ))]
+  ""
+  "uxor,<dwc>sbz %1,%2,%%r0\;or,tr %%r0,%%r0,%0\;ldi 1,%0"
+  [(set_attr "type" "multi")
+   (set_attr "length" "12")])
+
+(define_insn "*unit_sbz_<mode>_j"
+  [(set (pc)
+	(if_then_else
+	  (ne (unspec:SWI [(match_operand:SWI 1 "register_operand" "r")]
+			  UNSPEC_SBZ)
+	      (const_int 0))
+	  (label_ref (match_operand 0 "" ""))
+	  (pc)))]
+  ""
+{
+  operands[2] = const0_rtx;
+  return pa_output_sbz_branch (operands, 0, insn);
+}
+  [(set_attr "type" "cbranch")
+   (set (attr "length")
+	(cond [(lt (abs (minus (match_dup 0) (plus (pc) (const_int 8))))
+		   (const_int MAX_17BIT_OFFSET))
+		 (const_int 8)
+	       (match_test "TARGET_PORTABLE_RUNTIME")
+		 (const_int 24)
+	       (not (match_test "flag_pic"))
+		 (const_int 20)]
+	      (const_int 28)))])
+
+(define_insn "*unit_nbz_<mode>_j"
+  [(set (pc)
+	(if_then_else
+	  (eq (unspec:SWI [(match_operand:SWI 1 "register_operand" "r")]
+			  UNSPEC_SBZ)
+	      (const_int 0))
+	  (label_ref (match_operand 0 "" ""))
+	  (pc)))]
+  ""
+{
+  operands[2] = const0_rtx;
+  return pa_output_sbz_branch (operands, 1, insn);
+}
+  [(set_attr "type" "cbranch")
+   (set (attr "length")
+	(cond [(lt (abs (minus (match_dup 0) (plus (pc) (const_int 8))))
+		   (const_int MAX_17BIT_OFFSET))
+		 (const_int 8)
+	       (match_test "TARGET_PORTABLE_RUNTIME")
+		 (const_int 24)
+	       (not (match_test "flag_pic"))
+		 (const_int 20)]
+	      (const_int 28)))])
+
+(define_insn "*uxor_sbz_<mode>_j"
+  [(set (pc)
+	(if_then_else
+	  (ne (unspec:SWI
+		[(xor:SWI
+		   (match_operand:SWI 1 "register_operand" "r")
+		   (match_operand:SWI 2 "register_operand" "r"))]
+		UNSPEC_SBZ)
+	      (const_int 0))
+	  (label_ref (match_operand 0 "" ""))
+	  (pc)))]
+  ""
+{
+  return pa_output_sbz_branch (operands, 0, insn);
+}
+  [(set_attr "type" "cbranch")
+   (set (attr "length")
+	(cond [(lt (abs (minus (match_dup 0) (plus (pc) (const_int 8))))
+		   (const_int MAX_17BIT_OFFSET))
+		 (const_int 8)
+	       (match_test "TARGET_PORTABLE_RUNTIME")
+		 (const_int 24)
+	       (not (match_test "flag_pic"))
+		 (const_int 20)]
+	      (const_int 28)))])
+
+(define_insn "*uxor_nbz_<mode>_j"
+  [(set (pc)
+	(if_then_else
+	  (eq (unspec:SWI
+		[(xor:SWI
+		   (match_operand:SWI 1 "register_operand" "r")
+		   (match_operand:SWI 2 "register_operand" "r"))]
+		UNSPEC_SBZ)
+	      (const_int 0))
+	  (label_ref (match_operand 0 "" ""))
+	  (pc)))]
+  ""
+{
+  return pa_output_sbz_branch (operands, 1, insn);
+}
+  [(set_attr "type" "cbranch")
+   (set (attr "length")
+	(cond [(lt (abs (minus (match_dup 0) (plus (pc) (const_int 8))))
+		   (const_int MAX_17BIT_OFFSET))
+		 (const_int 8)
+	       (match_test "TARGET_PORTABLE_RUNTIME")
+		 (const_int 24)
+	       (not (match_test "flag_pic"))
+		 (const_int 20)]
+	      (const_int 28)))])

@@ -41,7 +41,7 @@ if test x$enable_linux_futex = xyes; then
   case "${target}" in
 
     aarch64*-*-linux*)
-	config_path="linux posix"
+	config_path="linux/aarch64 linux posix"
 	;;
 
     alpha*-*-linux*)

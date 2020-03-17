@@ -3440,6 +3440,18 @@
    ""
 )
 
+(define_expand "<ANY_EXTEND:su>cmp<GPI:mode>3_carryinC"
+   [(set (reg:CC CC_REGNUM)
+	 (compare:CC
+	   (ANY_EXTEND:<DWI>
+	     (match_operand:GPI 0 "register_operand"))
+	   (plus:<DWI>
+	     (ANY_EXTEND:<DWI>
+	       (match_operand:GPI 1 "register_operand"))
+	     (ltu:<DWI> (reg:CC CC_REGNUM) (const_int 0)))))]
+   ""
+)
+
 (define_insn "*usub<GPI:mode>3_carryinC_z1"
   [(set (reg:CC CC_REGNUM)
 	(compare:CC
@@ -3454,6 +3466,19 @@
 	  (match_operand:GPI 3 "aarch64_borrow_operation" "")))]
    ""
    "sbcs\\t%<w>0, <w>zr, %<w>1"
+  [(set_attr "type" "adc_reg")]
+)
+
+(define_insn "*<ANY_EXTEND:su>cmp<GPI:mode>3_carryinC_z1"
+  [(set (reg:CC CC_REGNUM)
+	(compare:CC
+	  (const_int 0)
+	  (plus:<DWI>
+	    (ANY_EXTEND:<DWI>
+	      (match_operand:GPI 0 "register_operand" "r"))
+	    (match_operand:<DWI> 1 "aarch64_borrow_operation" ""))))]
+   ""
+   "sbcs\\t<w>zr, <w>zr, %<w>0"
   [(set_attr "type" "adc_reg")]
 )
 
@@ -3472,6 +3497,17 @@
   [(set_attr "type" "adc_reg")]
 )
 
+(define_insn "*<ANY_EXTEND:su>cmp<GPI:mode>3_carryinC_z2"
+  [(set (reg:CC CC_REGNUM)
+	(compare:CC
+	  (ANY_EXTEND:<DWI>
+	    (match_operand:GPI 0 "register_operand" "r"))
+	  (match_operand:<DWI> 1 "aarch64_borrow_operation" "")))]
+   ""
+   "sbcs\\t<w>zr, %<w>0, <w>zr"
+  [(set_attr "type" "adc_reg")]
+)
+
 (define_insn "*usub<GPI:mode>3_carryinC"
   [(set (reg:CC CC_REGNUM)
 	(compare:CC
@@ -3487,6 +3523,20 @@
 	  (match_operand:GPI 4 "aarch64_borrow_operation" "")))]
    ""
    "sbcs\\t%<w>0, %<w>1, %<w>2"
+  [(set_attr "type" "adc_reg")]
+)
+
+(define_insn "*<ANY_EXTEND:su>cmp<GPI:mode>3_carryinC"
+  [(set (reg:CC CC_REGNUM)
+	(compare:CC
+	  (ANY_EXTEND:<DWI>
+	    (match_operand:GPI 0 "register_operand" "r"))
+	  (plus:<DWI>
+	    (ANY_EXTEND:<DWI>
+	      (match_operand:GPI 1 "register_operand" "r"))
+	    (match_operand:<DWI> 2 "aarch64_borrow_operation" ""))))]
+   ""
+   "sbcs\\t<w>zr, %<w>0, %<w>1"
   [(set_attr "type" "adc_reg")]
 )
 

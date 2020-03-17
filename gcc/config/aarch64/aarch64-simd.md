@@ -4762,10 +4762,8 @@
     if (GP_REGNUM_P (REGNO (operands[0]))
 	&& GP_REGNUM_P (REGNO (operands[1])))
       {
-	machine_mode mode = SELECT_CC_MODE (<CMP>, operands[1], operands[2]);
-	rtx cc_reg = aarch64_gen_compare_reg (<CMP>, operands[1], operands[2]);
-	rtx comparison = gen_rtx_<CMP> (mode, operands[1], operands[2]);
-	emit_insn (gen_cstoredi_neg (operands[0], comparison, cc_reg));
+	rtx cmp = aarch64_gen_compare_reg (<CMP>, operands[1], operands[2]);
+	emit_insn (gen_cstoredi_neg (operands[0], cmp, XEXP (cmp, 0)));
 	DONE;
       }
     /* Otherwise, we expand to a similar pattern which does not
@@ -4825,10 +4823,8 @@
     if (GP_REGNUM_P (REGNO (operands[0]))
 	&& GP_REGNUM_P (REGNO (operands[1])))
       {
-	machine_mode mode = CCmode;
-	rtx cc_reg = aarch64_gen_compare_reg (<CMP>, operands[1], operands[2]);
-	rtx comparison = gen_rtx_<CMP> (mode, operands[1], operands[2]);
-	emit_insn (gen_cstoredi_neg (operands[0], comparison, cc_reg));
+	rtx cmp = aarch64_gen_compare_reg (<CMP>, operands[1], operands[2]);
+	emit_insn (gen_cstoredi_neg (operands[0], cmp, XEXP (cmp, 0)));
 	DONE;
       }
     /* Otherwise, we expand to a similar pattern which does not
@@ -4898,10 +4894,8 @@
 	&& GP_REGNUM_P (REGNO (operands[1])))
       {
 	rtx and_tree = gen_rtx_AND (DImode, operands[1], operands[2]);
-	machine_mode mode = SELECT_CC_MODE (NE, and_tree, const0_rtx);
-	rtx cc_reg = aarch64_gen_compare_reg (NE, and_tree, const0_rtx);
-	rtx comparison = gen_rtx_NE (mode, and_tree, const0_rtx);
-	emit_insn (gen_cstoredi_neg (operands[0], comparison, cc_reg));
+	rtx cmp = aarch64_gen_compare_reg (NE, and_tree, const0_rtx);
+	emit_insn (gen_cstoredi_neg (operands[0], cmp, XEXP (cmp, 0)));
 	DONE;
       }
     /* Otherwise, we expand to a similar pattern which does not

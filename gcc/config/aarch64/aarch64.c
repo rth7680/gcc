@@ -2810,7 +2810,7 @@ emit_set_insn (rtx x, rtx y)
 }
 
 /* X and Y are two things to compare using CODE.  Emit the compare insn and
-   return the rtx for register 0 in the proper mode.  */
+   return the rtx for the CCmode comparison.  */
 rtx
 aarch64_gen_compare_reg (RTX_CODE code, rtx x, rtx y)
 {
@@ -2841,7 +2841,7 @@ aarch64_gen_compare_reg (RTX_CODE code, rtx x, rtx y)
       cc_reg = gen_rtx_REG (cc_mode, CC_REGNUM);
       emit_set_insn (cc_reg, gen_rtx_COMPARE (cc_mode, x, y));
     }
-  return cc_reg;
+  return gen_rtx_fmt_ee (code, VOIDmode, cc_reg, const0_rtx);
 }
 
 /* Similarly, but maybe zero-extend Y if Y_MODE < SImode.  */
@@ -2867,7 +2867,7 @@ aarch64_gen_compare_reg_maybe_ze (RTX_CODE code, rtx x, rtx y,
 	  cc_mode = CC_SWPmode;
 	  cc_reg = gen_rtx_REG (cc_mode, CC_REGNUM);
 	  emit_set_insn (cc_reg, t);
-	  return cc_reg;
+	  return gen_rtx_fmt_ee (code, VOIDmode, cc_reg, const0_rtx);
 	}
     }
 
@@ -19403,7 +19403,8 @@ aarch64_expand_compare_and_swap (rtx operands[])
 
       emit_insn (gen_aarch64_compare_and_swap_lse (mode, rval, mem,
 						   newval, mod_s));
-      cc_reg = aarch64_gen_compare_reg_maybe_ze (NE, rval, oldval, mode);
+      x = aarch64_gen_compare_reg_maybe_ze (EQ, rval, oldval, mode);
+      PUT_MODE (x, SImode);
     }
   else if (TARGET_OUTLINE_ATOMICS)
     {
@@ -19414,7 +19415,8 @@ aarch64_expand_compare_and_swap (rtx operands[])
       rval = emit_library_call_value (func, NULL_RTX, LCT_NORMAL, r_mode,
 				      oldval, mode, newval, mode,
 				      XEXP (mem, 0), Pmode);
-      cc_reg = aarch64_gen_compare_reg_maybe_ze (NE, rval, oldval, mode);
+      x = aarch64_gen_compare_reg_maybe_ze (EQ, rval, oldval, mode);
+      PUT_MODE (x, SImode);
     }
   else
     {
@@ -19426,13 +19428,13 @@ aarch64_expand_compare_and_swap (rtx operands[])
       emit_insn (GEN_FCN (code) (rval, mem, oldval, newval,
 				 is_weak, mod_s, mod_f));
       cc_reg = gen_rtx_REG (CCmode, CC_REGNUM);
+      x = gen_rtx_EQ (SImode, cc_reg, const0_rtx);
     }
 
   if (r_mode != mode)
     rval = gen_lowpart (mode, rval);
   emit_move_insn (operands[1], rval);
 
-  x = gen_rtx_EQ (SImode, cc_reg, const0_rtx);
   emit_insn (gen_rtx_SET (bval, x));
 }
 
@@ -19507,10 +19509,8 @@ aarch64_split_compare_and_swap (rtx operands[])
   if (strong_zero_p)
     x = gen_rtx_NE (VOIDmode, rval, const0_rtx);
   else
-    {
-      rtx cc_reg = aarch64_gen_compare_reg_maybe_ze (NE, rval, oldval, mode);
-      x = gen_rtx_NE (VOIDmode, cc_reg, const0_rtx);
-    }
+    x = aarch64_gen_compare_reg_maybe_ze (NE, rval, oldval, mode);
+
   x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
 			    gen_rtx_LABEL_REF (Pmode, label2), pc_rtx);
   aarch64_emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
@@ -19523,8 +19523,7 @@ aarch64_split_compare_and_swap (rtx operands[])
 	{
 	  /* Emit an explicit compare instruction, so that we can correctly
 	     track the condition codes.  */
-	  rtx cc_reg = aarch64_gen_compare_reg (NE, scratch, const0_rtx);
-	  x = gen_rtx_NE (GET_MODE (cc_reg), cc_reg, const0_rtx);
+	  x = aarch64_gen_compare_reg (NE, scratch, const0_rtx);
 	}
       else
 	x = gen_rtx_NE (VOIDmode, scratch, const0_rtx);
@@ -19619,8 +19618,7 @@ aarch64_split_atomic_op (enum rtx_code code, rtx old_out, rtx new_out, rtx mem,
     {
       /* Emit an explicit compare instruction, so that we can correctly
 	 track the condition codes.  */
-      rtx cc_reg = aarch64_gen_compare_reg (NE, cond, const0_rtx);
-      x = gen_rtx_NE (GET_MODE (cc_reg), cc_reg, const0_rtx);
+      x = aarch64_gen_compare_reg (NE, cond, const0_rtx);
     }
   else
     x = gen_rtx_NE (VOIDmode, cond, const0_rtx);

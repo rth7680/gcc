@@ -162,9 +162,8 @@ aarch64_speculation_establish_tracker ()
   rtx sp = gen_rtx_REG (DImode, SP_REGNUM);
   rtx tracker = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
   start_sequence ();
-  rtx cc = aarch64_gen_compare_reg (EQ, sp, const0_rtx);
-  emit_insn (gen_cstoredi_neg (tracker,
-			       gen_rtx_NE (CCmode, cc, const0_rtx), cc));
+  rtx x = aarch64_gen_compare_reg (NE, sp, const0_rtx);
+  emit_insn (gen_cstoredi_neg (tracker, x, XEXP (x, 0)));
   rtx_insn *seq = get_insns ();
   end_sequence ();
   return seq;

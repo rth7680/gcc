@@ -484,12 +484,12 @@
 			   (label_ref (match_operand 3 "" ""))
 			   (pc)))]
   ""
-  "
-  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[0]), operands[1],
+{
+  operands[0] = aarch64_gen_compare_reg (GET_CODE (operands[0]), operands[1],
 					 operands[2]);
+  operands[1] = XEXP (operands[0], 0);
   operands[2] = const0_rtx;
-  "
-)
+})
 
 (define_expand "cbranch<mode>4"
   [(set (pc) (if_then_else (match_operator 0 "aarch64_comparison_operator"
@@ -498,12 +498,12 @@
 			   (label_ref (match_operand 3 "" ""))
 			   (pc)))]
   ""
-  "
-  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[0]), operands[1],
+{
+  operands[0] = aarch64_gen_compare_reg (GET_CODE (operands[0]), operands[1],
 					 operands[2]);
+  operands[1] = XEXP (operands[0], 0);
   operands[2] = const0_rtx;
-  "
-)
+})
 
 (define_expand "cbranchcc4"
   [(set (pc) (if_then_else
@@ -618,9 +618,8 @@
     if (val == 2)
       {
 	rtx masked = gen_reg_rtx (<MODE>mode);
-	rtx ccreg = aarch64_gen_compare_reg (LT, operands[1], const0_rtx);
+	rtx x = aarch64_gen_compare_reg (LT, operands[1], const0_rtx);
 	emit_insn (gen_and<mode>3 (masked, operands[1], mask));
-	rtx x = gen_rtx_LT (VOIDmode, ccreg, const0_rtx);
 	emit_insn (gen_csneg3<mode>_insn (operands[0], x, masked, masked));
 	DONE;
       }
@@ -3608,8 +3607,7 @@
    (match_operand:GPI 1 "register_operand")]
   ""
   {
-    rtx ccreg = aarch64_gen_compare_reg (LT, operands[1], const0_rtx);
-    rtx x = gen_rtx_LT (VOIDmode, ccreg, const0_rtx);
+    rtx x = aarch64_gen_compare_reg (LT, operands[1], const0_rtx);
     emit_insn (gen_csneg3<mode>_insn (operands[0], x, operands[1], operands[1]));
     DONE;
   }
@@ -4023,12 +4021,13 @@
 	 [(match_operand:GPI 2 "register_operand")
 	  (match_operand:GPI 3 "aarch64_plus_operand")]))]
   ""
-  "
-  operands[2] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
-				      operands[3]);
+{
+  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
+				         operands[3]);
+  PUT_MODE (operands[1], SImode);
+  operands[2] = XEXP (operands[1], 0);
   operands[3] = const0_rtx;
-  "
-)
+})
 
 (define_expand "cstorecc4"
   [(set (match_operand:SI 0 "register_operand")
@@ -4036,11 +4035,10 @@
 	[(match_operand 2 "cc_register")
          (match_operand 3 "const0_operand")]))]
   ""
-"{
+{
   emit_insn (gen_rtx_SET (operands[0], operands[1]));
   DONE;
-}")
-
+})
 
 (define_expand "cstore<mode>4"
   [(set (match_operand:SI 0 "register_operand")
@@ -4048,12 +4046,13 @@
 	 [(match_operand:GPF 2 "register_operand")
 	  (match_operand:GPF 3 "aarch64_fp_compare_operand")]))]
   ""
-  "
-  operands[2] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
-				      operands[3]);
+{
+  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
+				         operands[3]);
+  PUT_MODE (operands[1], SImode);
+  operands[2] = XEXP (operands[1], 0);
   operands[3] = const0_rtx;
-  "
-)
+})
 
 ;; On some implementations (e.g. tx1) csel is more expensive than adc.
 (define_insn "*cstore<mode>_carry"
@@ -4176,12 +4175,12 @@
 	 (match_operand:GPI 4 "register_operand")
 	 (match_operand:GPI 5 "register_operand")))]
   ""
-  "
-  operands[2] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
-				      operands[3]);
+{
+  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
+				         operands[3]);
+  operands[2] = XEXP (operands[1], 0);
   operands[3] = const0_rtx;
-  "
-)
+})
 
 (define_expand "cmov<mode>6"
   [(set (match_operand:GPF 0 "register_operand")
@@ -4192,12 +4191,12 @@
 	 (match_operand:GPF 4 "register_operand")
 	 (match_operand:GPF 5 "register_operand")))]
   ""
-  "
-  operands[2] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
-				      operands[3]);
+{
+  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
+				         operands[3]);
+  operands[2] = XEXP (operands[1], 0);
   operands[3] = const0_rtx;
-  "
-)
+})
 
 (define_insn "*cmov<mode>_insn"
   [(set (match_operand:ALLI 0 "register_operand" "=r,r,r,r,r,r,r")
@@ -4274,15 +4273,13 @@
 			   (match_operand:ALLI 3 "register_operand")))]
   ""
   {
-    rtx ccreg;
     enum rtx_code code = GET_CODE (operands[1]);
 
     if (code == UNEQ || code == LTGT)
       FAIL;
 
-    ccreg = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
-				     XEXP (operands[1], 1));
-    operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
+    operands[1] = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
+					   XEXP (operands[1], 1));
   }
 )
 
@@ -4293,15 +4290,13 @@
 			  (match_operand:GPF 3 "register_operand")))]
   ""
   {
-    rtx ccreg;
     enum rtx_code code = GET_CODE (operands[1]);
 
     if (code == UNEQ || code == LTGT)
       FAIL;
 
-    ccreg = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
-				  XEXP (operands[1], 1));
-    operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
+    operands[1] = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
+					   XEXP (operands[1], 1));
   }
 )
 
@@ -4312,15 +4307,13 @@
 			  (match_operand:GPF 3 "register_operand")))]
   ""
   {
-    rtx ccreg;
     enum rtx_code code = GET_CODE (operands[1]);
 
     if (code == UNEQ || code == LTGT)
       FAIL;
 
-    ccreg = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
-				  XEXP (operands[1], 1));
-    operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
+    operands[1] = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
+					   XEXP (operands[1], 1));
   }
 )
 
@@ -4331,15 +4324,13 @@
 			  (match_operand:GPI 3 "register_operand")))]
   ""
   {
-    rtx ccreg;
     enum rtx_code code = GET_CODE (operands[1]);
 
     if (code == UNEQ || code == LTGT)
       FAIL;
 
-    ccreg = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
-				      XEXP (operands[1], 1));
-    operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
+    operands[1] = aarch64_gen_compare_reg (code, XEXP (operands[1], 0),
+					   XEXP (operands[1], 1));
   }
 )
 
@@ -4905,8 +4896,7 @@
    (match_operand:GPI 1 "register_operand")]
   ""
   {
-    rtx ccreg = aarch64_gen_compare_reg (EQ, operands[1], const0_rtx);
-    rtx x = gen_rtx_NE (VOIDmode, ccreg, const0_rtx);
+    rtx x = aarch64_gen_compare_reg (NE, operands[1], const0_rtx);
 
     emit_insn (gen_rbit<mode>2 (operands[0], operands[1]));
     emit_insn (gen_clz<mode>2 (operands[0], operands[0]));

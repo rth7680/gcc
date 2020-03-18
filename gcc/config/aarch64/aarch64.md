@@ -522,7 +522,7 @@
 	   [(match_operand 0 "cc_register" "")
 	    (const_int 0)])
 	  (compare:CC_ONLY
-	    (match_operand:GPI 2 "register_operand" "r,r,r")
+	    (match_operand:GPI 2 "aarch64_reg_or_zero" "rZ,r,r")
 	    (match_operand:GPI 3 "aarch64_ccmp_operand" "r,Uss,Usn"))
 	  (unspec:CC_ONLY
 	    [(match_operand 5 "immediate_operand")]
@@ -562,7 +562,7 @@
 	    [(match_operand 5 "immediate_operand")]
 	    UNSPEC_NZCV)
 	  (compare:CC_ONLY
-	    (match_operand:GPI 2 "register_operand" "r,r,r")
+	    (match_operand:GPI 2 "aarch64_reg_or_zero" "rZ,r,r")
 	    (match_operand:GPI 3 "aarch64_ccmp_operand" "r,Uss,Usn"))))]
   ""
   "@
@@ -3946,14 +3946,14 @@
 
 (define_insn "cmp<mode>"
   [(set (reg:CC CC_REGNUM)
-	(compare:CC (match_operand:GPI 0 "register_operand" "rk,rk,rk")
-		    (match_operand:GPI 1 "aarch64_plus_operand" "r,I,J")))]
+	(compare:CC (match_operand:GPI 0 "aarch64_reg_or_zero" "rk,rk,rkZ")
+		    (match_operand:GPI 1 "aarch64_plus_operand" "I,J,r")))]
   ""
   "@
-   cmp\\t%<w>0, %<w>1
    cmp\\t%<w>0, %1
-   cmn\\t%<w>0, #%n1"
-  [(set_attr "type" "alus_sreg,alus_imm,alus_imm")]
+   cmn\\t%<w>0, #%n1
+   cmp\\t%<w>0, %<w>1"
+  [(set_attr "type" "alus_imm,alus_imm,alus_sreg")]
 )
 
 (define_insn "fcmp<mode>"

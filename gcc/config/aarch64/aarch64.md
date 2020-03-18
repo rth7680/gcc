@@ -471,6 +471,20 @@
   operands[2] = const0_rtx;
 })
 
+(define_expand "cbranchti4"
+  [(set (pc) (if_then_else (match_operator 0 "aarch64_comparison_operator"
+			    [(match_operand:TI 1 "register_operand")
+			     (match_operand:TI 2 "aarch64_plus_operand")])
+			   (label_ref (match_operand 3 "" ""))
+			   (pc)))]
+  ""
+{
+  operands[0] = aarch64_gen_compare_reg (GET_CODE (operands[0]), operands[1],
+					 operands[2]);
+  operands[1] = XEXP (operands[0], 0);
+  operands[2] = const0_rtx;
+})
+
 (define_expand "cbranch<mode>4"
   [(set (pc) (if_then_else (match_operator 0 "aarch64_comparison_operator"
 			    [(match_operand:GPF 1 "register_operand")
@@ -4046,6 +4060,20 @@
 	(match_operator:SI 1 "aarch64_comparison_operator"
 	 [(match_operand:GPI 2 "register_operand")
 	  (match_operand:GPI 3 "aarch64_plus_operand")]))]
+  ""
+{
+  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
+				         operands[3]);
+  PUT_MODE (operands[1], SImode);
+  operands[2] = XEXP (operands[1], 0);
+  operands[3] = const0_rtx;
+})
+
+(define_expand "cstoreti4"
+  [(set (match_operand:SI 0 "register_operand")
+	(match_operator:SI 1 "aarch64_comparison_operator"
+	 [(match_operand:TI 2 "register_operand")
+	  (match_operand:TI 3 "aarch64_plus_operand")]))]
   ""
 {
   operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],

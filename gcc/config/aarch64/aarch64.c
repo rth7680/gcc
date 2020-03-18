@@ -2333,32 +2333,126 @@ rtx
 aarch64_gen_compare_reg (RTX_CODE code, rtx x, rtx y)
 {
   machine_mode cmp_mode = GET_MODE (x);
-  machine_mode cc_mode;
   rtx cc_reg;
 
   if (cmp_mode == TImode)
     {
-      gcc_assert (code == NE);
-
-      cc_mode = CCmode;
-      cc_reg = gen_rtx_REG (cc_mode, CC_REGNUM);
-
       rtx x_lo = operand_subword (x, 0, 0, TImode);
-      rtx y_lo = operand_subword (y, 0, 0, TImode);
-      emit_set_insn (cc_reg, gen_rtx_COMPARE (cc_mode, x_lo, y_lo));
-
       rtx x_hi = operand_subword (x, 1, 0, TImode);
-      rtx y_hi = operand_subword (y, 1, 0, TImode);
-      emit_insn (gen_ccmpccdi (cc_reg, cc_reg, x_hi, y_hi,
-			       gen_rtx_EQ (cc_mode, cc_reg, const0_rtx),
-			       GEN_INT (AARCH64_EQ)));
+      struct expand_operand ops[2];
+      rtx y_lo, y_hi, tmp;
+
+      if (CONST_INT_P (y))
+	{
+	  HOST_WIDE_INT y_int = INTVAL (y);
+
+	  y_lo = y;
+	  switch (code)
+	    {
+	    case EQ:
+	    case NE:
+	      /* For equality, IOR the two halves together.  If this gets
+		 used for a branch, we expect this to fold to cbz/cbnz;
+		 otherwise it's no larger than cmp+ccmp below.  Beware of
+		 the compare-and-swap post-reload split and use cmp+ccmp.  */
+	      if (y_int == 0 && can_create_pseudo_p ())
+		{
+		  tmp = gen_reg_rtx (DImode);
+		  emit_insn (gen_iordi3 (tmp, x_hi, x_lo));
+		  emit_insn (gen_cmpdi (tmp, const0_rtx));
+		  cc_reg = gen_rtx_REG (CCmode, CC_REGNUM);
+		  goto done;
+		}
+		break;
+
+	    case LE:
+	    case GT:
+	      /* Add 1 to Y to convert to LT/GE, which avoids the swap and
+		 keeps the constant operand.  The cstoreti and cbranchti
+		 operand predicates require aarch64_plus_operand, which
+		 means this increment cannot overflow.  */
+	      y_lo = gen_int_mode (++y_int, DImode);
+	      code = (code == LE ? LT : GE);
+	      /* fall through */
+
+	    case LT:
+	    case GE:
+	      /* Check only the sign bit using tst, or fold to tbz/tbnz.  */
+	      if (y_int == 0)
+		{
+		  cc_reg = gen_rtx_REG (CC_NZmode, CC_REGNUM);
+		  tmp = gen_rtx_AND (DImode, x_hi, GEN_INT (INT64_MIN));
+		  tmp = gen_rtx_COMPARE (CC_NZmode, tmp, const0_rtx);
+		  emit_set_insn (cc_reg, tmp);
+		  code = (code == LT ? NE : EQ);
+		  goto done;
+		}
+	      break;
+
+	    default:
+	      break;
+	    }
+	  y_hi = (y_int < 0 ? constm1_rtx : const0_rtx);
+	}
+      else
+	{
+	  y_lo = operand_subword (y, 0, 0, TImode);
+	  y_hi = operand_subword (y, 1, 0, TImode);
+	}
+
+      switch (code)
+	{
+	case LEU:
+	case GTU:
+	case LE:
+	case GT:
+	  std::swap (x_lo, y_lo);
+	  std::swap (x_hi, y_hi);
+	  code = swap_condition (code);
+	  break;
+
+	default:
+	  break;
+	}
+
+      /* Emit cmpdi, forcing operands into registers as required. */
+      create_input_operand (&ops[0], x_lo, DImode);
+      create_input_operand (&ops[1], y_lo, DImode);
+      expand_insn (CODE_FOR_cmpdi, 2, ops);
+
+      cc_reg = gen_rtx_REG (CCmode, CC_REGNUM);
+      switch (code)
+	{
+	case EQ:
+	case NE:
+	  /* For EQ, (x_lo == y_lo) && (x_hi == y_hi).  */
+	  emit_insn (gen_ccmpccdi (cc_reg, cc_reg, x_hi, y_hi,
+				   gen_rtx_EQ (VOIDmode, cc_reg, const0_rtx),
+				   GEN_INT (AARCH64_EQ)));
+	  break;
+
+	case LTU:
+	case GEU:
+	case LT:
+	case GE:
+	  /* Compute (x - y), as double-word arithmetic.  */
+	  create_input_operand (&ops[0], x_hi, DImode);
+	  create_input_operand (&ops[1], y_hi, DImode);
+	  expand_insn (CODE_FOR_cmpdi3_carryin, 2, ops);
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
     }
   else
     {
-      cc_mode = SELECT_CC_MODE (code, x, y);
+      machine_mode cc_mode = SELECT_CC_MODE (code, x, y);
       cc_reg = gen_rtx_REG (cc_mode, CC_REGNUM);
       emit_set_insn (cc_reg, gen_rtx_COMPARE (cc_mode, x, y));
     }
+
+ done:
   return gen_rtx_fmt_ee (code, VOIDmode, cc_reg, const0_rtx);
 }
 

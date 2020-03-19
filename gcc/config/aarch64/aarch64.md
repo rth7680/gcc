@@ -3010,13 +3010,12 @@
 (define_expand "usubv<mode>4"
   [(match_operand:GPI 0 "register_operand")
    (match_operand:GPI 1 "aarch64_reg_or_zero")
-   (match_operand:GPI 2 "aarch64_reg_or_zero")
+   (match_operand:GPI 2 "aarch64_plus_operand")
    (label_ref (match_operand 3 "" ""))]
   ""
 {
   emit_insn (gen_sub<mode>3_compare1 (operands[0], operands[1], operands[2]));
   aarch64_gen_unlikely_cbranch (LTU, CCmode, operands[3]);
-
   DONE;
 })
 
@@ -3163,7 +3162,7 @@
   [(set_attr "type" "alus_imm")]
 )
 
-(define_insn "sub<mode>3_compare1"
+(define_insn "*sub<mode>3_compare1"
   [(set (reg:CC CC_REGNUM)
 	(compare:CC
 	  (match_operand:GPI 1 "aarch64_reg_or_zero" "rkZ")
@@ -3174,6 +3173,25 @@
   "subs\\t%<w>0, %<w>1, %<w>2"
   [(set_attr "type" "alus_sreg")]
 )
+
+(define_expand "sub<mode>3_compare1"
+  [(parallel
+    [(set (reg:CC CC_REGNUM)
+	  (compare:CC
+	    (match_operand:GPI 1 "aarch64_reg_or_zero")
+	    (match_operand:GPI 2 "aarch64_plus_operand")))
+     (set (match_operand:GPI 0 "register_operand")
+	  (minus:GPI (match_dup 1) (match_dup 2)))])]
+  ""
+{
+  if (CONST_SCALAR_INT_P (operands[2]))
+    {
+      emit_insn (gen_sub<mode>3_compare1_imm
+		 (operands[0], operands[1], operands[2],
+		  GEN_INT (-INTVAL (operands[2]))));
+      DONE;
+    }
+})
 
 (define_peephole2
   [(set (match_operand:GPI 0 "aarch64_general_reg")

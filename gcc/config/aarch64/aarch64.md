@@ -3452,6 +3452,7 @@
    ""
 )
 
+;; Substituting zero into the first input operand.
 (define_insn "*usub<GPI:mode>3_carryinC_z1"
   [(set (reg:CC CC_REGNUM)
 	(compare:CC
@@ -3482,6 +3483,7 @@
   [(set_attr "type" "adc_reg")]
 )
 
+;; Substituting zero into the second input operand.
 (define_insn "*usub<GPI:mode>3_carryinC_z2"
   [(set (reg:CC CC_REGNUM)
 	(compare:CC
@@ -3505,6 +3507,19 @@
 	  (match_operand:<DWI> 1 "aarch64_borrow_operation" "")))]
    ""
    "sbcs\\t<w>zr, %<w>0, <w>zr"
+  [(set_attr "type" "adc_reg")]
+)
+
+;; Substituting -1 into the second input operand.
+(define_insn "*<ANY_EXTEND:su>cmp<GPI:mode>3_carryinC_m2"
+  [(set (reg:CC CC_REGNUM)
+	(compare:CC
+	  (neg:<DWI>
+	    (match_operand:<DWI> 1 "aarch64_carry_operation" ""))
+	  (ANY_EXTEND:<DWI>
+	    (match_operand:GPI 0 "register_operand" "r"))))]
+   ""
+   "adcs\\t<w>zr, %<w>0, <w>zr"
   [(set_attr "type" "adc_reg")]
 )
 

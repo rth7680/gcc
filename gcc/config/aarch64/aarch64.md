@@ -2606,16 +2606,17 @@
    ""
 )
 
-;; Note that add with carry with two zero inputs is matched by cset,
-;; and that add with carry with one zero input is matched by cinc.
+;; While add with carry with two zero inputs will be folded to cset,
+;; and add with carry with one zero input will be folded to cinc,
+;; accept the zeros during initial expansion.
 
 (define_insn "*add<mode>3_carryin"
   [(set (match_operand:GPI 0 "register_operand" "=r")
 	(plus:GPI
 	  (plus:GPI
 	    (match_operand:GPI 3 "aarch64_carry_operation" "")
-	    (match_operand:GPI 1 "register_operand" "r"))
-	  (match_operand:GPI 2 "register_operand" "r")))]
+	    (match_operand:GPI 1 "aarch64_reg_or_zero" "rZ"))
+	  (match_operand:GPI 2 "aarch64_reg_or_zero" "rZ")))]
    ""
    "adc\\t%<w>0, %<w>1, %<w>2"
   [(set_attr "type" "adc_reg")]

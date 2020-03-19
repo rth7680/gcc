@@ -21130,110 +21130,61 @@ aarch64_gen_unlikely_cbranch (enum rtx_code code, machine_mode cc_mode,
   aarch64_emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
 }
 
-/* Generate DImode scratch registers for 128-bit (TImode) addition.
+/* Generate DImode scratch registers for 128-bit (TImode) add/sub.
+   INPUT represents the TImode input operand
+   LO represents the low half (DImode) of the TImode operand
+   HI represents the high half (DImode) of the TImode operand.  */
 
-   OP1 represents the TImode destination operand 1
-   OP2 represents the TImode destination operand 2
-   LOW_DEST represents the low half (DImode) of TImode operand 0
-   LOW_IN1 represents the low half (DImode) of TImode operand 1
-   LOW_IN2 represents the low half (DImode) of TImode operand 2
-   HIGH_DEST represents the high half (DImode) of TImode operand 0
-   HIGH_IN1 represents the high half (DImode) of TImode operand 1
-   HIGH_IN2 represents the high half (DImode) of TImode operand 2.  */
-
-void
-aarch64_addti_scratch_regs (rtx op1, rtx op2, rtx *low_dest,
-			    rtx *low_in1, rtx *low_in2,
-			    rtx *high_dest, rtx *high_in1,
-			    rtx *high_in2)
+static void
+aarch64_ti_split (rtx input, rtx *lo, rtx *hi)
 {
-  *low_dest = gen_reg_rtx (DImode);
-  *low_in1 = gen_lowpart (DImode, op1);
-  *low_in2 = simplify_gen_subreg (DImode, op2, TImode,
-				  subreg_lowpart_offset (DImode, TImode));
-  *high_dest = gen_reg_rtx (DImode);
-  *high_in1 = gen_highpart (DImode, op1);
-  *high_in2 = simplify_gen_subreg (DImode, op2, TImode,
-				   subreg_highpart_offset (DImode, TImode));
+  *lo = simplify_gen_subreg (DImode, input, TImode,
+			     subreg_lowpart_offset (DImode, TImode));
+  *hi = simplify_gen_subreg (DImode, input, TImode,
+			     subreg_highpart_offset (DImode, TImode));
 }
 
-/* Generate DImode scratch registers for 128-bit (TImode) subtraction.
-
-   This function differs from 'arch64_addti_scratch_regs' in that
-   OP1 can be an immediate constant (zero). We must call
-   subreg_highpart_offset with DImode and TImode arguments, otherwise
-   VOIDmode will be used for the const_int which generates an internal
-   error from subreg_size_highpart_offset which does not expect a size of zero.
-
-   OP1 represents the TImode destination operand 1
-   OP2 represents the TImode destination operand 2
-   LOW_DEST represents the low half (DImode) of TImode operand 0
-   LOW_IN1 represents the low half (DImode) of TImode operand 1
-   LOW_IN2 represents the low half (DImode) of TImode operand 2
-   HIGH_DEST represents the high half (DImode) of TImode operand 0
-   HIGH_IN1 represents the high half (DImode) of TImode operand 1
-   HIGH_IN2 represents the high half (DImode) of TImode operand 2.  */
-
-
-void
-aarch64_subvti_scratch_regs (rtx op1, rtx op2, rtx *low_dest,
-			     rtx *low_in1, rtx *low_in2,
-			     rtx *high_dest, rtx *high_in1,
-			     rtx *high_in2)
-{
-  *low_dest = gen_reg_rtx (DImode);
-  *low_in1 = simplify_gen_subreg (DImode, op1, TImode,
-				  subreg_lowpart_offset (DImode, TImode));
-
-  *low_in2 = simplify_gen_subreg (DImode, op2, TImode,
-				  subreg_lowpart_offset (DImode, TImode));
-  *high_dest = gen_reg_rtx (DImode);
-
-  *high_in1 = simplify_gen_subreg (DImode, op1, TImode,
-				   subreg_highpart_offset (DImode, TImode));
-  *high_in2 = simplify_gen_subreg (DImode, op2, TImode,
-				   subreg_highpart_offset (DImode, TImode));
-}
-
-/* Generate RTL for 128-bit (TImode) subtraction with overflow.
-
+/* Generate RTL for 128-bit (TImode) addition or subtraction.
    OP0 represents the TImode destination operand 0
-   LOW_DEST represents the low half (DImode) of TImode operand 0
-   LOW_IN1 represents the low half (DImode) of TImode operand 1
-   LOW_IN2 represents the low half (DImode) of TImode operand 2
-   HIGH_DEST represents the high half (DImode) of TImode operand 0
-   HIGH_IN1 represents the high half (DImode) of TImode operand 1
-   HIGH_IN2 represents the high half (DImode) of TImode operand 2
-   UNSIGNED_P is true if the operation is being performed on unsigned
-   values.  */
+   OP1 and OP2 represent the TImode input operands.
+
+   Normal or Overflow behaviour is obtained via the INSN_CODE operands:
+   CODE_HI_LO0 is used when the low half of OP2 == 0, otherwise
+   CODE_LO is used on the low halves,
+   CODE_HI is used on the high halves.  */
+
 void
-aarch64_expand_subvti (rtx op0, rtx low_dest, rtx low_in1,
-		       rtx low_in2, rtx high_dest, rtx high_in1,
-		       rtx high_in2, bool unsigned_p)
+aarch64_expand_addsubti (rtx op0, rtx op1, rtx op2,
+			 int code_hi_lo0, int code_lo, int code_hi)
 {
-  if (low_in2 == const0_rtx)
+  rtx low_dest, low_op1, low_op2, high_dest, high_op1, high_op2;
+  struct expand_operand ops[3];
+
+  aarch64_ti_split (op1, &low_op1, &high_op1);
+  aarch64_ti_split (op2, &low_op2, &high_op2);
+
+  if (low_op2 == const0_rtx)
     {
-      low_dest = low_in1;
-      high_in2 = force_reg (DImode, high_in2);
-      if (unsigned_p)
-	emit_insn (gen_subdi3_compare1 (high_dest, high_in1, high_in2));
-      else
-	emit_insn (gen_subvdi_insn (high_dest, high_in1, high_in2));
+      low_dest = low_op1;
+      code_hi = code_hi_lo0;
     }
   else
     {
-      emit_insn (gen_subdi3_compare1 (low_dest, low_in1, low_in2));
-
-      high_in2 = force_reg (DImode, high_in2);
-      if (unsigned_p)
-	emit_insn (gen_usubdi3_carryinC (high_dest, high_in1, high_in2));
-      else
-	emit_insn (gen_subdi3_carryinV (high_dest, high_in1, high_in2));
+      low_dest = gen_reg_rtx (DImode);
+      create_output_operand(&ops[0], low_dest, DImode);
+      create_input_operand(&ops[1], low_op1, DImode);
+      create_input_operand(&ops[2], low_op2, DImode);
+      expand_insn ((insn_code)code_lo, 3, ops);
     }
+
+  high_dest = gen_reg_rtx (DImode);
+  create_output_operand(&ops[0], high_dest, DImode);
+  create_input_operand(&ops[1], high_op1, DImode);
+  create_input_operand(&ops[2], high_op2, DImode);
+  expand_insn ((insn_code)code_hi, 3, ops);
 
   emit_move_insn (gen_lowpart (DImode, op0), low_dest);
   emit_move_insn (gen_highpart (DImode, op0), high_dest);
-
 }
 
 /* Implement the TARGET_ASAN_SHADOW_OFFSET hook.  */

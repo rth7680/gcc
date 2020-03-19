@@ -2088,30 +2088,10 @@
 		 (match_operand:TI 2 "aarch64_reg_or_imm")))]
   ""
 {
-  rtx low_dest, op1_low, op2_low, high_dest, op1_high, op2_high;
-
-  aarch64_addti_scratch_regs (operands[1], operands[2],
-			      &low_dest, &op1_low, &op2_low,
-			      &high_dest, &op1_high, &op2_high);
-
-  if (op2_low == const0_rtx)
-    {
-      low_dest = op1_low;
-      if (!aarch64_pluslong_operand (op2_high, DImode))
-	op2_high = force_reg (DImode, op2_high);
-      emit_insn (gen_adddi3 (high_dest, op1_high, op2_high));
-    }
-  else
-    {
-      emit_insn (gen_adddi3_compareC (low_dest, op1_low,
-				      force_reg (DImode, op2_low)));
-      emit_insn (gen_adddi3_carryin (high_dest, op1_high,
-				     force_reg (DImode, op2_high)));
-    }
-
-  emit_move_insn (gen_lowpart (DImode, operands[0]), low_dest);
-  emit_move_insn (gen_highpart (DImode, operands[0]), high_dest);
-
+  aarch64_expand_addsubti (operands[0], operands[1], operands[2],
+			   CODE_FOR_adddi3,
+			   CODE_FOR_adddi3_compareC,
+			   CODE_FOR_adddi3_carryin);
   DONE;
 })
 
@@ -2122,29 +2102,10 @@
    (label_ref (match_operand 3 "" ""))]
   ""
 {
-  rtx low_dest, op1_low, op2_low, high_dest, op1_high, op2_high;
-
-  aarch64_addti_scratch_regs (operands[1], operands[2],
-			      &low_dest, &op1_low, &op2_low,
-			      &high_dest, &op1_high, &op2_high);
-
-  if (op2_low == const0_rtx)
-    {
-      low_dest = op1_low;
-      emit_insn (gen_adddi3_compareV (high_dest, op1_high,
-				      force_reg (DImode, op2_high)));
-    }
-  else
-    {
-      emit_insn (gen_adddi3_compareC (low_dest, op1_low,
-				      force_reg (DImode, op2_low)));
-      emit_insn (gen_adddi3_carryinV (high_dest, op1_high,
-				      force_reg (DImode, op2_high)));
-    }
-
-  emit_move_insn (gen_lowpart (DImode, operands[0]), low_dest);
-  emit_move_insn (gen_highpart (DImode, operands[0]), high_dest);
-
+  aarch64_expand_addsubti (operands[0], operands[1], operands[2],
+			   CODE_FOR_adddi3_compareV,
+			   CODE_FOR_adddi3_compareC,
+			   CODE_FOR_adddi3_carryinV);
   aarch64_gen_unlikely_cbranch (NE, CC_Vmode, operands[3]);
   DONE;
 })
@@ -2156,32 +2117,13 @@
    (label_ref (match_operand 3 "" ""))]
   ""
 {
-  rtx low_dest, op1_low, op2_low, high_dest, op1_high, op2_high;
-
-  aarch64_addti_scratch_regs (operands[1], operands[2],
-			      &low_dest, &op1_low, &op2_low,
-			      &high_dest, &op1_high, &op2_high);
-
-  if (op2_low == const0_rtx)
-    {
-      low_dest = op1_low;
-      emit_insn (gen_adddi3_compareC (high_dest, op1_high,
-				      force_reg (DImode, op2_high)));
-    }
-  else
-    {
-      emit_insn (gen_adddi3_compareC (low_dest, op1_low,
-				      force_reg (DImode, op2_low)));
-      emit_insn (gen_adddi3_carryinC (high_dest, op1_high,
-				      force_reg (DImode, op2_high)));
-    }
-
-  emit_move_insn (gen_lowpart (DImode, operands[0]), low_dest);
-  emit_move_insn (gen_highpart (DImode, operands[0]), high_dest);
-
+  aarch64_expand_addsubti (operands[0], operands[1], operands[2],
+			   CODE_FOR_adddi3_compareC,
+			   CODE_FOR_adddi3_compareC,
+			   CODE_FOR_adddi3_carryinC);
   aarch64_gen_unlikely_cbranch (GEU, CC_ADCmode, operands[3]);
   DONE;
- })
+})
 
 (define_insn "add<mode>3_compare0"
   [(set (reg:CC_NZ CC_REGNUM)
@@ -3020,20 +2962,13 @@
 (define_expand "subti3"
   [(set (match_operand:TI 0 "register_operand")
 	(minus:TI (match_operand:TI 1 "aarch64_reg_or_zero")
-		  (match_operand:TI 2 "register_operand")))]
+		  (match_operand:TI 2 "aarch64_reg_or_imm")))]
   ""
 {
-  rtx low_dest, op1_low, op2_low, high_dest, op1_high, op2_high;
-
-  aarch64_subvti_scratch_regs (operands[1], operands[2],
-			       &low_dest, &op1_low, &op2_low,
-			       &high_dest, &op1_high, &op2_high);
-
-  emit_insn (gen_subdi3_compare1 (low_dest, op1_low, op2_low));
-  emit_insn (gen_subdi3_carryin (high_dest, op1_high, op2_high));
-
-  emit_move_insn (gen_lowpart (DImode, operands[0]), low_dest);
-  emit_move_insn (gen_highpart (DImode, operands[0]), high_dest);
+  aarch64_expand_addsubti (operands[0], operands[1], operands[2],
+			   CODE_FOR_subdi3,
+			   CODE_FOR_subdi3_compare1,
+			   CODE_FOR_subdi3_carryin);
   DONE;
 })
 
@@ -3044,14 +2979,10 @@
    (label_ref (match_operand 3 "" ""))]
   ""
 {
-  rtx low_dest, op1_low, op2_low, high_dest, op1_high, op2_high;
-
-  aarch64_subvti_scratch_regs (operands[1], operands[2],
-			       &low_dest, &op1_low, &op2_low,
-			       &high_dest, &op1_high, &op2_high);
-  aarch64_expand_subvti (operands[0], low_dest, op1_low, op2_low,
-			 high_dest, op1_high, op2_high, false);
-
+  aarch64_expand_addsubti (operands[0], operands[1], operands[2],
+			   CODE_FOR_subvdi_insn,
+			   CODE_FOR_subdi3_compare1,
+			   CODE_FOR_subdi3_carryinV);
   aarch64_gen_unlikely_cbranch (NE, CC_Vmode, operands[3]);
   DONE;
 })
@@ -3063,14 +2994,10 @@
    (label_ref (match_operand 3 "" ""))]
   ""
 {
-  rtx low_dest, op1_low, op2_low, high_dest, op1_high, op2_high;
-
-  aarch64_subvti_scratch_regs (operands[1], operands[2],
-				    &low_dest, &op1_low, &op2_low,
-			       &high_dest, &op1_high, &op2_high);
-  aarch64_expand_subvti (operands[0], low_dest, op1_low, op2_low,
-			 high_dest, op1_high, op2_high, true);
-
+  aarch64_expand_addsubti (operands[0], operands[1], operands[2],
+			   CODE_FOR_subdi3_compare1,
+			   CODE_FOR_subdi3_compare1,
+			   CODE_FOR_usubdi3_carryinC);
   aarch64_gen_unlikely_cbranch (LTU, CCmode, operands[3]);
   DONE;
 })

@@ -3653,6 +3653,36 @@
   }
 )
 
+(define_expand "absti2"
+  [(match_operand:TI 0 "register_operand")
+   (match_operand:TI 1 "register_operand")]
+  ""
+  {
+    rtx lo_op1 = gen_lowpart (DImode, operands[1]);
+    rtx hi_op1 = gen_highpart (DImode, operands[1]);
+    rtx lo_tmp = gen_reg_rtx (DImode);
+    rtx hi_tmp = gen_reg_rtx (DImode);
+    rtx x;
+
+    emit_insn (gen_negdi_carryout (lo_tmp, lo_op1));
+    emit_insn (gen_negvdi_carryinV (hi_tmp, hi_op1));
+
+    rtx cc = gen_rtx_REG (CC_NZmode, CC_REGNUM);
+
+    x = gen_rtx_GE (VOIDmode, cc, const0_rtx);
+    x = gen_rtx_IF_THEN_ELSE (DImode, x, lo_tmp, lo_op1);
+    emit_insn (gen_rtx_SET (lo_tmp, x));
+
+    x = gen_rtx_GE (VOIDmode, cc, const0_rtx);
+    x = gen_rtx_IF_THEN_ELSE (DImode, x, hi_tmp, hi_op1);
+    emit_insn (gen_rtx_SET (hi_tmp, x));
+
+    emit_move_insn (gen_lowpart (DImode, operands[0]), lo_tmp);
+    emit_move_insn (gen_highpart (DImode, operands[0]), hi_tmp);
+    DONE;
+  }
+)
+
 (define_insn "neg<mode>2"
   [(set (match_operand:GPI 0 "register_operand" "=r,w")
 	(neg:GPI (match_operand:GPI 1 "register_operand" "r,w")))]

@@ -95,6 +95,7 @@ size_t gomp_affinity_format_len;
 char *goacc_device_type;
 int goacc_device_num;
 int goacc_default_dims[GOMP_DIM_MAX];
+enum gomp_barrier_kind gomp_barrier_kind;
 
 #ifndef LIBGOMP_OFFLOADED_ONLY
 
@@ -1125,6 +1126,30 @@ parse_allocator (void)
   return omp_default_mem_alloc;
 }
 
+/* Parse the GOMP_BARRIER_KIND environment variable.  Return true if one was
+   present and it was successfully parsed.  */
+
+static bool
+parse_barrier_kind (void)
+{
+  char *env;
+
+  env = getenv ("GOMP_BARRIER_KIND");
+  if (env == NULL)
+    return false;
+
+  while (isspace ((unsigned char) *env))
+    ++env;
+  if (strncasecmp (env, "global", 6) == 0)
+    {
+      gomp_barrier_kind = GOMP_BARRIER_GLOBAL;
+      return true;
+    }
+
+  gomp_error ("Invalid value for envinroment variable GOMP_BARRIER_KIND");
+  return false;
+}
+
 static void
 parse_acc_device_type (void)
 {
@@ -1473,6 +1498,9 @@ initialize_env (void)
     }
 
   handle_omp_display_env (stacksize, wait_policy);
+
+  if (!parse_barrier_kind ())
+    gomp_barrier_kind = GOMP_BARRIER_GLOBAL;
 
   /* OpenACC.  */
 

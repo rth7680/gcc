@@ -33,37 +33,45 @@
 
 typedef struct
 {
-  gomp_barrier_t bar;
+  union {
+    gomp_barrier_t bar;
+    gomp_barrier_t *arr;
+  };
 } gomp_simple_barrier_t;
 
 static inline void
 gomp_simple_barrier_init (gomp_simple_barrier_t *bar, unsigned count)
 {
-  gomp_barrier_init (&bar->bar, count);
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    gomp_barrier_init (&bar->bar, count);
 }
 
 static inline void
 gomp_simple_barrier_reinit (gomp_simple_barrier_t *bar, unsigned count)
 {
-  gomp_barrier_reinit (&bar->bar, count);
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    gomp_barrier_reinit (&bar->bar, count);
 }
 
 static inline void
 gomp_simple_barrier_destroy (gomp_simple_barrier_t *bar)
 {
-  gomp_barrier_destroy (&bar->bar);
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    gomp_barrier_destroy (&bar->bar);
 }
 
 static inline void
 gomp_simple_barrier_wait (gomp_simple_barrier_t *bar)
 {
-  gomp_barrier_wait (&bar->bar);
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    gomp_barrier_wait (&bar->bar);
 }
 
 static inline void
 gomp_simple_barrier_wait_last (gomp_simple_barrier_t *bar)
 {
-  gomp_barrier_wait_last (&bar->bar);
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    gomp_barrier_wait_last (&bar->bar);
 }
 
 #endif /* GOMP_SIMPLE_BARRIER_H */

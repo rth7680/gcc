@@ -1359,6 +1359,7 @@ beginning with @env{GOMP_} are GNU extensions.
 * GOMP_DEBUG::              Enable debugging output
 * GOMP_STACKSIZE::          Set default thread stack size
 * GOMP_SPINCOUNT::          Set the busy-wait spin count
+* GOMP_BARRIER_KIND::       Set the barrier type for thread pool synchronization
 * GOMP_RTEMS_THREAD_POOLS:: Set the RTEMS specific thread pools
 @end menu
 
@@ -1760,6 +1761,16 @@ or @env{OMP_WAIT_POLICY} is @code{PASSIVE}.
 @ref{OMP_WAIT_POLICY}
 @end table
 
+
+
+@node GOMP_BARRIER_KIND
+@section @env{GOMP_BARRIER_KIND} -- Set the barrier type for thread pool synchronization
+@cindex Environment Variable
+@cindex Implementation specific setting
+@table @asis
+@item @emph{Description}:
+TODO
+@end table
 
 
 @node GOMP_RTEMS_THREAD_POOLS

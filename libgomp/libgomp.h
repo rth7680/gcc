@@ -196,6 +196,13 @@ struct gomp_task;
 struct gomp_taskgroup;
 struct htab;
 
+enum gomp_barrier_kind
+{
+  GOMP_BARRIER_GLOBAL,
+  GOMP_BARRIER_PER_THREAD
+};
+extern enum gomp_barrier_kind gomp_barrier_kind;
+
 #include "priority_queue.h"
 #include "sem.h"
 #include "mutex.h"

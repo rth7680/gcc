@@ -31,19 +31,72 @@
 
 #include "bar.h"
 
+enum gomp_barrier_arr_status_t
+{
+  GOMP_BARRIER_ARR_STATUS_FREE     = 0,
+  GOMP_BARRIER_ARR_STATUS_USED     = 1,
+  GOMP_BARRIER_ARR_STATUS_EXITTING = 2,
+};
+
 typedef struct
 {
   union {
     gomp_barrier_t bar;
-    gomp_barrier_t *arr;
+    struct gomp_barrier_arr_t {
+      gomp_barrier_t *arr;
+      enum gomp_barrier_arr_status_t *act;
+      size_t cnt;
+    } arr;
   };
 } gomp_simple_barrier_t;
+
+static inline void
+gomp_simple_barrier_allocate (gomp_simple_barrier_t *bar, unsigned count)
+{
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    return;
+
+  if (bar->arr.arr)
+    free (bar->arr.arr);
+  size_t elem = sizeof (gomp_barrier_t)
+		+ sizeof (enum gomp_barrier_arr_status_t);
+  bar->arr.arr = gomp_malloc_cleared (count * elem);
+  bar->arr.act = (void *) &bar->arr.arr[count];
+  bar->arr.cnt = count;
+}
+
+static inline unsigned
+gomp_simple_barrier_size (gomp_simple_barrier_t *bar)
+{
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    return -1;
+
+  return bar->arr.cnt;
+}
+
+static inline void
+gomp_simple_barrier_free (gomp_simple_barrier_t *bar)
+{
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    return;
+
+  free (bar->arr.arr);
+  bar->arr.arr = NULL;
+  bar->arr.act = NULL;
+  bar->arr.cnt = 0;
+}
 
 static inline void
 gomp_simple_barrier_init (gomp_simple_barrier_t *bar, unsigned count)
 {
   if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
     gomp_barrier_init (&bar->bar, count);
+  else
+    {
+      bar->arr.arr = NULL;
+      bar->arr.act = NULL;
+      bar->arr.cnt = 0;
+    }
 }
 
 static inline void
@@ -58,20 +111,80 @@ gomp_simple_barrier_destroy (gomp_simple_barrier_t *bar)
 {
   if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
     gomp_barrier_destroy (&bar->bar);
+  else
+    for (unsigned int i = 0; i < bar->arr.cnt; i++)
+      gomp_barrier_destroy (&bar->arr.arr[i]);
 }
 
 static inline void
-gomp_simple_barrier_wait (gomp_simple_barrier_t *bar)
+gomp_simple_barrier_wait (gomp_simple_barrier_t *bar, unsigned idx)
 {
   if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
     gomp_barrier_wait (&bar->bar);
+  else
+    gomp_barrier_wait (&bar->arr.arr[idx]);
 }
 
 static inline void
-gomp_simple_barrier_wait_last (gomp_simple_barrier_t *bar)
+gomp_simple_barrier_wait_all (gomp_simple_barrier_t *bar)
+{
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    gomp_barrier_wait (&bar->bar);
+  else
+    {
+      for (unsigned int i = 0; i < bar->arr.cnt; i++)
+	{
+	  switch (bar->arr.act[i])
+	  {
+	  case GOMP_BARRIER_ARR_STATUS_EXITTING:
+	    bar->arr.act[i] = GOMP_BARRIER_ARR_STATUS_FREE;
+	    gomp_barrier_wait (&bar->arr.arr[i]);
+	    break;
+	  case GOMP_BARRIER_ARR_STATUS_USED:
+	    gomp_barrier_wait (&bar->arr.arr[i]);
+	    break;
+	  default:
+	    break;
+	  }
+	}
+    }
+}
+
+static inline void
+gomp_simple_barrier_set_exitting (gomp_simple_barrier_t *bar, unsigned idx)
+{
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    return;
+
+  bar->arr.act[idx] = GOMP_BARRIER_ARR_STATUS_EXITTING;
+}
+
+static inline unsigned
+gomp_simple_barrier_alloc_idx (gomp_simple_barrier_t *bar)
+{
+  if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
+    return -1;
+
+  for (unsigned int idx = 0; idx < bar->arr.cnt; idx++)
+    {
+      if (bar->arr.act[idx] == GOMP_BARRIER_ARR_STATUS_FREE)
+	{
+	  gomp_barrier_init (&bar->arr.arr[idx], 2);
+	  bar->arr.act[idx] = GOMP_BARRIER_ARR_STATUS_USED;
+	  return idx;
+	}
+    }
+
+  return -1;
+}
+
+static inline void
+gomp_simple_barrier_wait_last (gomp_simple_barrier_t *bar, unsigned idx)
 {
   if (gomp_barrier_kind == GOMP_BARRIER_GLOBAL)
     gomp_barrier_wait_last (&bar->bar);
+  else
+    gomp_barrier_wait (&bar->arr.arr[idx]);
 }
 
 #endif /* GOMP_SIMPLE_BARRIER_H */

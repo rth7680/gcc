@@ -712,6 +712,7 @@ struct gomp_thread
 
   /* User pthread thread pool */
   struct gomp_thread_pool *thread_pool;
+  unsigned int barrier_i;
 
 #if defined(LIBGOMP_USE_PTHREADS) \
     && (!defined(HAVE_TLS) \

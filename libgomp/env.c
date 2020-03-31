@@ -1500,7 +1500,8 @@ initialize_env (void)
   handle_omp_display_env (stacksize, wait_policy);
 
   if (!parse_barrier_kind ())
-    gomp_barrier_kind = GOMP_BARRIER_GLOBAL;
+    //gomp_barrier_kind = GOMP_BARRIER_GLOBAL;
+    gomp_barrier_kind = GOMP_BARRIER_PER_THREAD;
 
   /* OpenACC.  */
 

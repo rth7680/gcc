@@ -23,6 +23,7 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
+
 /* This file handles the maintenance of threads in response to team
    creation and termination.  */
 
@@ -30,6 +31,7 @@
 #include "pool.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifdef LIBGOMP_USE_PTHREADS
 pthread_attr_t gomp_thread_attr;
@@ -58,6 +60,7 @@ struct gomp_thread_start_data
   unsigned int place;
   bool nested;
   pthread_t handle;
+  unsigned int barrier_i;
 };
 
 
@@ -92,6 +95,7 @@ gomp_thread_start (void *xdata)
 #ifdef GOMP_NEEDS_THREAD_HANDLE
   thr->handle = data->handle;
 #endif
+  thr->barrier_i = data->barrier_i;
 
   thr->ts.team->ordered_release[thr->ts.team_id] = &thr->release;
 
@@ -114,7 +118,7 @@ gomp_thread_start (void *xdata)
     {
       pool->threads[thr->ts.team_id] = thr;
 
-      gomp_simple_barrier_wait (&pool->threads_dock);
+      gomp_simple_barrier_wait (&pool->threads_dock, thr->barrier_i);
       do
 	{
 	  struct gomp_team *team = thr->ts.team;
@@ -124,7 +128,7 @@ gomp_thread_start (void *xdata)
 	  gomp_team_barrier_wait_final (&team->barrier);
 	  gomp_finish_task (task);
 
-	  gomp_simple_barrier_wait (&pool->threads_dock);
+	  gomp_simple_barrier_wait (&pool->threads_dock, thr->barrier_i);
 
 	  local_fn = thr->fn;
 	  local_data = thr->data;
@@ -230,7 +234,7 @@ gomp_free_pool_helper (void *thread_pool)
   struct gomp_thread *thr = gomp_thread ();
   struct gomp_thread_pool *pool
     = (struct gomp_thread_pool *) thread_pool;
-  gomp_simple_barrier_wait_last (&pool->threads_dock);
+  gomp_simple_barrier_wait_last (&pool->threads_dock, thr->barrier_i);
   gomp_sem_destroy (&thr->release);
   thr->thread_pool = NULL;
   thr->task = NULL;
@@ -249,6 +253,40 @@ gomp_free_pool_helper (void *thread_pool)
 
 /* Free a thread pool and release its threads. */
 
+static void
+gomp_team_release_thread_pool (struct gomp_thread_pool *pool,
+			       unsigned threads_used)
+{
+  if (threads_used > 0)
+    {
+      int i;
+      for (i = 1; i < threads_used; i++)
+	{
+	  struct gomp_thread *nthr = pool->threads[i];
+	  nthr->fn = gomp_free_pool_helper;
+	  nthr->data = pool;
+	}
+      /* This barrier undocks threads docked on pool->threads_dock.  */
+      gomp_simple_barrier_wait_all (&pool->threads_dock);
+      /* And this waits till all threads have called gomp_barrier_wait_last
+	 in gomp_free_pool_helper.  */
+      gomp_simple_barrier_wait_all (&pool->threads_dock);
+      /* Now it is safe to destroy the barrier and free the pool.  */
+      gomp_simple_barrier_destroy (&pool->threads_dock);
+
+      gomp_simple_barrier_free (&pool->threads_dock);
+
+#ifdef HAVE_SYNC_BUILTINS
+      __sync_fetch_and_add (&gomp_managed_threads,
+			     1L - threads_used);
+#else
+      gomp_mutex_lock (&gomp_managed_threads_lock);
+      gomp_managed_threads -= threads_used - 1L;
+      gomp_mutex_unlock (&gomp_managed_threads_lock);
+#endif
+   }
+}
+
 void
 gomp_free_thread (void *arg __attribute__((unused)))
 {
@@ -256,32 +294,7 @@ gomp_free_thread (void *arg __attribute__((unused)))
   struct gomp_thread_pool *pool = thr->thread_pool;
   if (pool)
     {
-      if (pool->threads_used > 0)
-	{
-	  int i;
-	  for (i = 1; i < pool->threads_used; i++)
-	    {
-	      struct gomp_thread *nthr = pool->threads[i];
-	      nthr->fn = gomp_free_pool_helper;
-	      nthr->data = pool;
-	    }
-	  /* This barrier undocks threads docked on pool->threads_dock.  */
-	  gomp_simple_barrier_wait (&pool->threads_dock);
-	  /* And this waits till all threads have called gomp_barrier_wait_last
-	     in gomp_free_pool_helper.  */
-	  gomp_simple_barrier_wait (&pool->threads_dock);
-	  /* Now it is safe to destroy the barrier and free the pool.  */
-	  gomp_simple_barrier_destroy (&pool->threads_dock);
-
-#ifdef HAVE_SYNC_BUILTINS
-	  __sync_fetch_and_add (&gomp_managed_threads,
-				1L - pool->threads_used);
-#else
-	  gomp_mutex_lock (&gomp_managed_threads_lock);
-	  gomp_managed_threads -= pool->threads_used - 1L;
-	  gomp_mutex_unlock (&gomp_managed_threads_lock);
-#endif
-	}
+      gomp_team_release_thread_pool (pool, pool->threads_used);
       if (pool->last_team)
 	free_team (pool->last_team);
 #ifndef __nvptx__
@@ -322,6 +335,7 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
   unsigned int affinity_count = 0;
   struct gomp_thread **affinity_thr = NULL;
   bool force_display = false;
+  unsigned idx;
 
   thr = gomp_thread ();
   nested = thr->ts.level;
@@ -485,8 +499,31 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
 	    = gomp_realloc (pool->threads,
 			    pool->threads_size
 			    * sizeof (struct gomp_thread *));
+
 	  /* Add current (master) thread to threads[].  */
 	  pool->threads[0] = thr;
+	}
+
+      unsigned td_size = gomp_simple_barrier_size (&pool->threads_dock);
+      if (old_threads_used + nthreads > td_size)
+	{
+	  if (old_threads_used == 0)
+	    /* This avoids to reallocate the array on next call (since
+	       old_threads_used will be equal to nthreads) and if some
+	       threads need to be released.  */
+	    td_size = 2 * nthreads;
+	  else
+	    {
+	      /* For per thread barrier, first release the all threads and
+		 reallocate the barrier array.  */
+	      gomp_team_release_thread_pool (pool, old_threads_used);
+	      td_size = old_threads_used + nthreads;
+	      old_threads_used = n = 0;
+	    }
+
+	  gomp_simple_barrier_allocate (&pool->threads_dock, td_size);
+	  /* The barrier is initialized once is allocated in thread
+	     creation.  */
 	}
 
       /* Release existing idle threads.  */
@@ -590,6 +627,8 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
 			      pool->threads[j]->data = affinity_thr[l];
 			      affinity_thr[l] = pool->threads[j];
 			    }
+			  gomp_simple_barrier_set_exitting (
+			    &pool->threads_dock, pool->threads[j]->barrier_i);
 			  pool->threads[j] = NULL;
 			}
 		      if (nthreads > old_threads_used)
@@ -707,6 +746,18 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
 	      if (affinity_count)
 		gomp_simple_barrier_reinit (&pool->threads_dock,
 					    nthreads + affinity_count);
+	    }
+	}
+
+      if (gomp_barrier_kind == GOMP_BARRIER_PER_THREAD)
+	{
+	  for (unsigned j = i; j < old_threads_used; j++)
+	    {
+	      nthr = pool->threads[j];
+	      if (nthr == NULL)
+		continue;
+	      gomp_simple_barrier_set_exitting (&pool->threads_dock,
+						nthr->barrier_i);
 	    }
 	}
 
@@ -837,6 +888,16 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
       start_data->thread_pool = pool;
       start_data->nested = nested;
 
+      if (gomp_barrier_kind == GOMP_BARRIER_PER_THREAD && !nested)
+	{
+	  idx = gomp_simple_barrier_alloc_idx (&pool->threads_dock);
+	  if (idx == -1)
+	    gomp_fatal ("Could not allocate a new thread barrier");
+	}
+      else
+	idx = -1;
+      start_data->barrier_i = idx;
+
       attr = gomp_adjust_thread_attr (attr, &thread_attr);
       err = pthread_create (&start_data->handle, attr, gomp_thread_start,
 			    start_data);
@@ -852,7 +913,7 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
   if (nested)
     gomp_barrier_wait (&team->barrier);
   else
-    gomp_simple_barrier_wait (&pool->threads_dock);
+    gomp_simple_barrier_wait_all (&pool->threads_dock);
 
   /* Decrease the barrier threshold to match the number of threads
      that should arrive back at the end of this team.  The extra
@@ -1031,7 +1092,7 @@ gomp_pause_pool_helper (void *thread_pool)
   struct gomp_thread *thr = gomp_thread ();
   struct gomp_thread_pool *pool
     = (struct gomp_thread_pool *) thread_pool;
-  gomp_simple_barrier_wait_last (&pool->threads_dock);
+  gomp_simple_barrier_wait_last (&pool->threads_dock, thr->barrier_i);
   gomp_sem_destroy (&thr->release);
   thr->thread_pool = NULL;
   thr->task = NULL;
@@ -1063,10 +1124,10 @@ gomp_pause_host (void)
 	      thrs[i] = gomp_thread_to_pthread_t (nthr);
 	    }
 	  /* This barrier undocks threads docked on pool->threads_dock.  */
-	  gomp_simple_barrier_wait (&pool->threads_dock);
+	  gomp_simple_barrier_wait_all (&pool->threads_dock);
 	  /* And this waits till all threads have called gomp_barrier_wait_last
 	     in gomp_pause_pool_helper.  */
-	  gomp_simple_barrier_wait (&pool->threads_dock);
+	  gomp_simple_barrier_wait_all (&pool->threads_dock);
 	  /* Now it is safe to destroy the barrier and free the pool.  */
 	  gomp_simple_barrier_destroy (&pool->threads_dock);
 

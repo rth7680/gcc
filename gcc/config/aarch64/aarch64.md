@@ -281,6 +281,7 @@
     UNSPEC_GEN_TAG_RND		; Generate a random 4-bit MTE tag.
     UNSPEC_TAG_SPACE		; Translate address to MTE tag address space.
     UNSPEC_LD1RO
+    UNSPEC_SBCS
 ])
 
 (define_c_enum "unspecv" [
@@ -2942,7 +2943,7 @@
   aarch64_expand_addsubti (operands[0], operands[1], operands[2],
 			   CODE_FOR_subvdi_insn,
 			   CODE_FOR_subdi3_compare1,
-			   CODE_FOR_subdi3_carryinV);
+			   CODE_FOR_subdi3_carryin_cmp);
   aarch64_gen_unlikely_cbranch (NE, CC_Vmode, operands[3]);
   DONE;
 })
@@ -2957,7 +2958,7 @@
   aarch64_expand_addsubti (operands[0], operands[1], operands[2],
 			   CODE_FOR_subdi3_compare1,
 			   CODE_FOR_subdi3_compare1,
-			   CODE_FOR_usubdi3_carryinC);
+			   CODE_FOR_subdi3_carryin_cmp);
   aarch64_gen_unlikely_cbranch (LTU, CCmode, operands[3]);
   DONE;
 })
@@ -2968,12 +2969,14 @@
    (label_ref (match_operand 2 "" ""))]
   ""
   {
-    emit_insn (gen_negdi_carryout (gen_lowpart (DImode, operands[0]),
-				   gen_lowpart (DImode, operands[1])));
-    emit_insn (gen_negvdi_carryinV (gen_highpart (DImode, operands[0]),
-				    gen_highpart (DImode, operands[1])));
-    aarch64_gen_unlikely_cbranch (NE, CC_Vmode, operands[2]);
+    rtx op0l = gen_lowpart (DImode, operands[0]);
+    rtx op1l = gen_lowpart (DImode, operands[1]);
+    rtx op0h = gen_highpart (DImode, operands[0]);
+    rtx op1h = gen_highpart (DImode, operands[1]);
 
+    emit_insn (gen_negdi_carryout (op0l, op1l));
+    emit_insn (gen_subdi3_carryin_cmp (op0h, const0_rtx, op1h));
+    aarch64_gen_unlikely_cbranch (NE, CC_Vmode, operands[2]);
     DONE;
   }
 )
@@ -2986,23 +2989,6 @@
 	(neg:DI (match_dup 1)))]
   ""
   "negs\\t%0, %1"
-  [(set_attr "type" "alus_sreg")]
-)
-
-(define_insn "negvdi_carryinV"
-  [(set (reg:CC_V CC_REGNUM)
-	(compare:CC_V
-	 (neg:TI (plus:TI
-		  (ltu:TI (reg:CC CC_REGNUM) (const_int 0))
-		  (sign_extend:TI (match_operand:DI 1 "register_operand" "r"))))
-	 (sign_extend:TI
-	  (neg:DI (plus:DI (ltu:DI (reg:CC CC_REGNUM) (const_int 0))
-			   (match_dup 1))))))
-   (set (match_operand:DI 0 "register_operand" "=r")
-	(neg:DI (plus:DI (ltu:DI (reg:CC CC_REGNUM) (const_int 0))
-			 (match_dup 1))))]
-  ""
-  "ngcs\\t%0, %1"
   [(set_attr "type" "alus_sreg")]
 )
 
@@ -3370,134 +3356,105 @@
   [(set_attr "type" "adc_reg")]
 )
 
-(define_expand "usub<GPI:mode>3_carryinC"
+(define_expand "sub<mode>3_carryin_cmp"
   [(parallel
-     [(set (reg:CC CC_REGNUM)
-	   (compare:CC
-	     (zero_extend:<DWI>
-	       (match_operand:GPI 1 "aarch64_reg_or_zero"))
-	     (plus:<DWI>
-	       (zero_extend:<DWI>
-		 (match_operand:GPI 2 "register_operand"))
-	       (ltu:<DWI> (reg:CC CC_REGNUM) (const_int 0)))))
-      (set (match_operand:GPI 0 "register_operand")
-	   (minus:GPI
-	     (minus:GPI (match_dup 1) (match_dup 2))
-	     (ltu:GPI (reg:CC CC_REGNUM) (const_int 0))))])]
+    [(set (match_dup 3)
+	  (unspec:CC
+	    [(match_operand:GPI 1 "aarch64_reg_or_zero")
+	     (match_operand:GPI 2 "aarch64_reg_zero_minus1")
+	     (match_dup 4)]
+	    UNSPEC_SBCS))
+     (set (match_operand:GPI 0 "register_operand" "=r")
+	  (unspec:GPI
+	    [(match_dup 1) (match_dup 2) (match_dup 4)]
+	    UNSPEC_SBCS))])]
    ""
+  {
+    operands[3] = gen_rtx_REG (CCmode, CC_REGNUM);
+    operands[4] = gen_rtx_LTU (<MODE>mode, operands[3], const0_rtx);
+  }
 )
 
-(define_insn "*usub<GPI:mode>3_carryinC_z1"
+(define_insn "*sub<mode>3_carryin_cmp"
   [(set (reg:CC CC_REGNUM)
-	(compare:CC
-	  (const_int 0)
-	  (plus:<DWI>
-	    (zero_extend:<DWI>
-	      (match_operand:GPI 1 "register_operand" "r"))
-	    (match_operand:<DWI> 2 "aarch64_borrow_operation" ""))))
-   (set (match_operand:GPI 0 "register_operand" "=r")
-	(minus:GPI
-	  (neg:GPI (match_dup 1))
-	  (match_operand:GPI 3 "aarch64_borrow_operation" "")))]
+	(unspec:CC
+	  [(match_operand:GPI 1 "aarch64_reg_or_zero" "rZ,rZ")
+	   (match_operand:GPI 2 "aarch64_reg_zero_minus1" "rZ,UsM")
+	   (match_operand:GPI 3 "aarch64_borrow_operation" "")]
+	  UNSPEC_SBCS))
+   (set (match_operand:GPI 0 "register_operand" "=r,r")
+	(unspec:GPI
+	  [(match_dup 1) (match_dup 2) (match_dup 3)]
+	  UNSPEC_SBCS))]
    ""
-   "sbcs\\t%<w>0, <w>zr, %<w>1"
+   "@
+    sbcs\\t%<w>0, %<w>1, %<w>2
+    adcs\\t%<w>0, %<w>1, <w>zr"
   [(set_attr "type" "adc_reg")]
 )
 
-(define_insn "*usub<GPI:mode>3_carryinC_z2"
+(define_expand "cmp<mode>3_carryin"
   [(set (reg:CC CC_REGNUM)
-	(compare:CC
-	  (zero_extend:<DWI>
-	    (match_operand:GPI 1 "register_operand" "r"))
-	  (match_operand:<DWI> 2 "aarch64_borrow_operation" "")))
-   (set (match_operand:GPI 0 "register_operand" "=r")
-	(minus:GPI
-	  (match_dup 1)
-	  (match_operand:GPI 3 "aarch64_borrow_operation" "")))]
+	(unspec:CC
+	  [(match_operand:GPI 0 "aarch64_reg_or_zero")
+	   (match_operand:GPI 1 "aarch64_reg_zero_minus1")
+	   (ltu:GPI (reg:CC CC_REGNUM) (const_int 0))]
+	  UNSPEC_SBCS))]
    ""
-   "sbcs\\t%<w>0, %<w>1, <w>zr"
-  [(set_attr "type" "adc_reg")]
 )
 
-(define_insn "*usub<GPI:mode>3_carryinC"
+(define_insn "*cmp<mode>3_carryin"
   [(set (reg:CC CC_REGNUM)
-	(compare:CC
-	  (zero_extend:<DWI>
-	    (match_operand:GPI 1 "register_operand" "r"))
-	  (plus:<DWI>
-	    (zero_extend:<DWI>
-	      (match_operand:GPI 2 "register_operand" "r"))
-	    (match_operand:<DWI> 3 "aarch64_borrow_operation" ""))))
-   (set (match_operand:GPI 0 "register_operand" "=r")
-	(minus:GPI
-	  (minus:GPI (match_dup 1) (match_dup 2))
-	  (match_operand:GPI 4 "aarch64_borrow_operation" "")))]
+	(unspec:CC
+	  [(match_operand:GPI 0 "aarch64_reg_or_zero" "rZ,rZ")
+	   (match_operand:GPI 1 "aarch64_reg_zero_minus1" "rZ,UsM")
+	   (match_operand:GPI 2 "aarch64_borrow_operation" "")]
+	  UNSPEC_SBCS))]
    ""
-   "sbcs\\t%<w>0, %<w>1, %<w>2"
+   "@
+    sbcs\\t<w>zr, %<w>0, %<w>1
+    adcs\\t<w>zr, %<w>0, <w>zr"
   [(set_attr "type" "adc_reg")]
 )
 
-(define_expand "sub<GPI:mode>3_carryinV"
-  [(parallel
-     [(set (reg:CC_V CC_REGNUM)
-	   (compare:CC_V
-	    (minus:<DWI>
-	     (sign_extend:<DWI>
-	       (match_operand:GPI 1 "aarch64_reg_or_zero"))
-	     (plus:<DWI>
-	       (sign_extend:<DWI>
-		 (match_operand:GPI 2 "register_operand"))
-	       (ltu:<DWI> (reg:CC CC_REGNUM) (const_int 0))))
-	    (sign_extend:<DWI>
-	     (minus:GPI (match_dup 1)
-			(plus:GPI (ltu:GPI (reg:CC CC_REGNUM) (const_int 0))
-				  (match_dup 2))))))
-      (set (match_operand:GPI 0 "register_operand")
-	   (minus:GPI
-	     (minus:GPI (match_dup 1) (match_dup 2))
-	     (ltu:GPI (reg:CC CC_REGNUM) (const_int 0))))])]
-   ""
+;; If combine can show that the borrow is 0, fold SBCS to SUBS.
+(define_insn_and_split "*sub<mode>3_carryin_cmp_0"
+  [(set (reg:CC CC_REGNUM)
+	(unspec:CC
+	  [(match_operand:GPI 1 "aarch64_reg_or_zero" "rk,rkZ")
+	   (match_operand:GPI 2 "aarch64_plus_immediate" "rIJ,r")
+	   (const_int 0)]
+	  UNSPEC_SBCS))
+   (set (match_operand:GPI 0 "register_operand")
+	(unspec:GPI
+	  [(match_dup 1) (match_dup 2) (const_int 0)]
+	  UNSPEC_SBCS))]
+  ""
+  "#"
+  ""
+  [(scratch)]
+  {
+    emit_insn (gen_sub<mode>3_compare1 (operands[0], operands[1],
+					operands[2]));
+    DONE;
+  }
 )
 
-(define_insn "*sub<mode>3_carryinV_z2"
-  [(set (reg:CC_V CC_REGNUM)
-	(compare:CC_V
-	 (minus:<DWI>
-	  (sign_extend:<DWI> (match_operand:GPI 1 "register_operand" "r"))
-	  (match_operand:<DWI> 2 "aarch64_borrow_operation" ""))
-	 (sign_extend:<DWI>
-	  (minus:GPI (match_dup 1)
-		     (match_operand:GPI 3 "aarch64_borrow_operation" "")))))
-   (set (match_operand:GPI 0 "register_operand" "=r")
-	(minus:GPI
-	 (match_dup 1) (match_dup 3)))]
+(define_insn_and_split "*cmp<mode>3_carryin_0"
+  [(set (reg:CC CC_REGNUM)
+	(unspec:CC
+	  [(match_operand:GPI 0 "aarch64_reg_or_zero" "rk,rZ")
+	   (match_operand:GPI 1 "aarch64_plus_operand" "rIJ,r")
+	   (const_int 0)]
+	  UNSPEC_SBCS))]
    ""
-   "sbcs\\t%<w>0, %<w>1, <w>zr"
-  [(set_attr "type" "adc_reg")]
-)
-
-(define_insn "*sub<mode>3_carryinV"
-  [(set (reg:CC_V CC_REGNUM)
-	(compare:CC_V
-	 (minus:<DWI>
-	  (sign_extend:<DWI>
-	    (match_operand:GPI 1 "register_operand" "r"))
-	  (plus:<DWI>
-	    (sign_extend:<DWI>
-	      (match_operand:GPI 2 "register_operand" "r"))
-	    (match_operand:<DWI> 3 "aarch64_borrow_operation" "")))
-	 (sign_extend:<DWI>
-	  (minus:GPI
-	   (match_dup 1)
-	   (plus:GPI (match_operand:GPI 4 "aarch64_borrow_operation" "")
-		     (match_dup 2))))))
-   (set (match_operand:GPI 0 "register_operand" "=r")
-	(minus:GPI
-	  (minus:GPI (match_dup 1) (match_dup 2))
-	  (match_dup 4)))]
+   "#"
    ""
-   "sbcs\\t%<w>0, %<w>1, %<w>2"
-  [(set_attr "type" "adc_reg")]
+  [(scratch)]
+  {
+    emit_insn (gen_cmp<mode> (operands[0], operands[1]));
+    DONE;
+  }
 )
 
 (define_insn "*sub_uxt<mode>_shift2"

@@ -68,12 +68,16 @@
        (ior (match_operand 0 "register_operand")
 	    (match_test "op == CONST0_RTX (GET_MODE (op))"))))
 
+(define_predicate "aarch64_reg_or_minus1"
+  (and (match_code "reg,subreg,const_int")
+       (ior (match_operand 0 "register_operand")
+	    (match_test "op == CONSTM1_RTX (GET_MODE (op))"))))
+
 (define_predicate "aarch64_reg_zero_minus1"
   (and (match_code "reg,subreg,const_int")
        (ior (match_operand 0 "register_operand")
 	    (ior (match_test "op == CONST0_RTX (GET_MODE (op))")
 	         (match_test "op == CONSTM1_RTX (GET_MODE (op))")))))
-
 
 (define_predicate "aarch64_reg_or_fp_zero"
   (ior (match_operand 0 "register_operand")

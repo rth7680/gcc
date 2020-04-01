@@ -2545,7 +2545,7 @@
 	  (plus:GPI
 	    (ltu:GPI (reg:CC_C CC_REGNUM) (const_int 0))
 	    (match_operand:GPI 1 "aarch64_reg_or_zero"))
-	  (match_operand:GPI 2 "aarch64_reg_or_zero")))]
+	  (match_operand:GPI 2 "aarch64_reg_zero_minus1")))]
    ""
    ""
 )
@@ -2555,28 +2555,32 @@
 ;; accept the zeros during initial expansion.
 
 (define_insn "*add<mode>3_carryin"
-  [(set (match_operand:GPI 0 "register_operand" "=r")
+  [(set (match_operand:GPI 0 "register_operand" "=r,r")
 	(plus:GPI
 	  (plus:GPI
 	    (match_operand:GPI 3 "aarch64_carry_operation" "")
-	    (match_operand:GPI 1 "aarch64_reg_or_zero" "rZ"))
-	  (match_operand:GPI 2 "aarch64_reg_or_zero" "rZ")))]
-   ""
-   "adc\\t%<w>0, %<w>1, %<w>2"
+	    (match_operand:GPI 1 "aarch64_reg_or_zero" "rZ,rZ"))
+	  (match_operand:GPI 2 "aarch64_reg_zero_minus1" "rZ,UsM")))]
+  ""
+  "@
+   adc\\t%<w>0, %<w>1, %<w>2
+   sbc\\t%<w>0, %<w>1, <w>zr"
   [(set_attr "type" "adc_reg")]
 )
 
 ;; zero_extend version of above
 (define_insn "*addsi3_carryin_uxtw"
-  [(set (match_operand:DI 0 "register_operand" "=r")
+  [(set (match_operand:DI 0 "register_operand" "=r,r")
 	(zero_extend:DI
 	  (plus:SI
 	    (plus:SI
 	      (match_operand:SI 3 "aarch64_carry_operation" "")
-	      (match_operand:SI 1 "register_operand" "r"))
-	    (match_operand:SI 2 "register_operand" "r"))))]
-   ""
-   "adc\\t%w0, %w1, %w2"
+	      (match_operand:SI 1 "register_operand" "r,r"))
+	    (match_operand:SI 2 "aarch64_reg_or_minus1" "r,UsM"))))]
+  ""
+  "@
+   adc\\t%w0, %w1, %w2
+   sbc\\t%w0, %w1, wzr"
   [(set_attr "type" "adc_reg")]
 )
 

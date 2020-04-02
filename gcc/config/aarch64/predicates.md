@@ -388,7 +388,7 @@
   machine_mode ccmode = GET_MODE (op0);
   if (ccmode == CC_Cmode)
     return GET_CODE (op) == LTU;
-  if (ccmode == CC_ADCmode || ccmode == CCmode)
+  if (ccmode == CCmode)
     return GET_CODE (op) == GEU;
   return false;
 })
@@ -406,7 +406,7 @@
   machine_mode ccmode = GET_MODE (op0);
   if (ccmode == CC_Cmode)
     return GET_CODE (op) == GEU;
-  if (ccmode == CC_ADCmode || ccmode == CCmode)
+  if (ccmode == CCmode)
     return GET_CODE (op) == LTU;
   return false;
 })

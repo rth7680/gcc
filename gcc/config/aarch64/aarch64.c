@@ -9094,16 +9094,6 @@ aarch64_select_cc_mode (RTX_CODE code, rtx x, rtx y)
       && rtx_equal_p (XEXP (x, 0), y))
     return CC_Cmode;
 
-  /* A test for unsigned overflow from an add with carry.  */
-  if ((mode_x == DImode || mode_x == TImode)
-      && (code == LTU || code == GEU)
-      && code_x == PLUS
-      && CONST_SCALAR_INT_P (y)
-      && (rtx_mode_t (y, mode_x)
-	  == (wi::shwi (1, mode_x)
-	      << (GET_MODE_BITSIZE (mode_x).to_constant () / 2))))
-    return CC_ADCmode;
-
   /* A test for signed overflow.  */
   if ((mode_x == DImode || mode_x == TImode)
       && code == NE
@@ -9228,15 +9218,6 @@ aarch64_get_condition_code_1 (machine_mode mode, enum rtx_code comp_code)
 	{
 	case LTU: return AARCH64_CS;
 	case GEU: return AARCH64_CC;
-	default: return -1;
-	}
-      break;
-
-    case E_CC_ADCmode:
-      switch (comp_code)
-	{
-	case GEU: return AARCH64_CS;
-	case LTU: return AARCH64_CC;
 	default: return -1;
 	}
       break;

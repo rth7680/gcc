@@ -2079,7 +2079,7 @@
 			   CODE_FOR_adddi3_compareC,
 			   CODE_FOR_adddi3_compareC,
 			   CODE_FOR_adddi3_carryin_cmp);
-  aarch64_gen_unlikely_cbranch (GEU, CC_ADCmode, operands[3]);
+  aarch64_gen_unlikely_cbranch (LTU, CC_Cmode, operands[3]);
   DONE;
 })
 

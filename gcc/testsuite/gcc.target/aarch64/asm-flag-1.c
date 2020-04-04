@@ -21,7 +21,8 @@ void f(char *out)
 
 /* { dg-final { scan-assembler "cset.*, ne" } } */
 /* { dg-final { scan-assembler "cset.*, eq" } } */
-/* { dg-final { scan-assembler "cset.*, cs" } } */
+/* { dg-final { scan-assembler-not "cset.*, cs" } } */
+/* { dg-final { scan-assembler "adc.*, .zr, .zr" } } */
 /* { dg-final { scan-assembler "cset.*, cc" } } */
 /* { dg-final { scan-assembler "cset.*, mi" } } */
 /* { dg-final { scan-assembler "cset.*, pl" } } */

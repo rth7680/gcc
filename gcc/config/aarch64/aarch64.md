@@ -4130,6 +4130,15 @@
   "
 )
 
+;; On some implementations (e.g. tx1) csel is more expensive than adc.
+(define_insn "*cstore<mode>_carry"
+  [(set (match_operand:ALLI 0 "register_operand" "=r")
+	(match_operand:ALLI 1 "aarch64_carry_operation"))]
+  ""
+  "adc\\t%<w>0, <w>zr, <w>zr"
+  [(set_attr "type" "adc_reg")]
+)
+
 (define_insn "aarch64_cstore<mode>"
   [(set (match_operand:ALLI 0 "register_operand" "=r")
 	(match_operator:ALLI 1 "aarch64_comparison_operator_mode"
@@ -4174,7 +4183,16 @@
   [(set_attr "type" "csel")]
 )
 
-;; zero_extend version of the above
+;; zero_extend versions of the above
+
+(define_insn "*cstoresi_carry_uxtw"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(zero_extend:DI (match_operand:SI 1 "aarch64_carry_operation")))]
+  ""
+  "adc\\t%w0, wzr, wzr"
+  [(set_attr "type" "adc_reg")]
+)
+
 (define_insn "*cstoresi_insn_uxtw"
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(zero_extend:DI
@@ -4183,6 +4201,15 @@
   ""
   "cset\\t%w0, %m1"
   [(set_attr "type" "csel")]
+)
+
+;; On some implementations (e.g. tx1) csel is more expensive than sbc.
+(define_insn "*cstore<mode>_borrow"
+  [(set (match_operand:ALLI 0 "register_operand" "=r")
+	(neg:ALLI (match_operand:ALLI 1 "aarch64_borrow_operation")))]
+  ""
+  "sbc\\t%<w>0, <w>zr, <w>zr"
+  [(set_attr "type" "adc_reg")]
 )
 
 (define_insn "cstore<mode>_neg"
@@ -4194,7 +4221,17 @@
   [(set_attr "type" "csel")]
 )
 
-;; zero_extend version of the above
+;; zero_extend versions of the above
+
+(define_insn "*cstoresi_borrow_uxtw"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(zero_extend:DI
+	  (neg:SI (match_operand:SI 1 "aarch64_borrow_operation"))))]
+  ""
+  "sbc\\t%w0, wzr, wzr"
+  [(set_attr "type" "adc_reg")]
+)
+
 (define_insn "*cstoresi_neg_uxtw"
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(zero_extend:DI
@@ -4395,6 +4432,16 @@
       return "<crc_variant>\\t%w0, %w1, %w2";
   }
   [(set_attr "type" "crc")]
+)
+
+;; On some implementations (e.g. tx1) csel is more expensive than adc.
+(define_insn "*csinc2<mode>_carry"
+  [(set (match_operand:GPI 0 "register_operand" "=r")
+	(plus:GPI (match_operand 2 "aarch64_carry_operation")
+                  (match_operand:GPI 1 "register_operand" "r")))]
+  ""
+  "adc\\t%<w>0, %<w>1, <w>zr"
+  [(set_attr "type" "adc_reg")]
 )
 
 (define_insn "*csinc2<mode>_insn"

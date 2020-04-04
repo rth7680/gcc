@@ -2644,8 +2644,8 @@
 	(plus:GPI
 	  (plus:GPI
 	    (ltu:GPI (reg:CC_C CC_REGNUM) (const_int 0))
-	    (match_operand:GPI 1 "aarch64_reg_or_zero"))
-	  (match_operand:GPI 2 "aarch64_reg_or_zero")))]
+	    (match_operand:GPI 1 "register_operand"))
+	  (match_operand:GPI 2 "register_operand")))]
    ""
    ""
 )

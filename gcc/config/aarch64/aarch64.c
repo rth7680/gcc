@@ -9641,21 +9641,25 @@ aarch64_select_cc_mode (RTX_CODE code, rtx x, rtx y)
   if ((mode_x == DImode || mode_x == TImode)
       && (code == LTU || code == GEU)
       && code_x == PLUS
-      && rtx_equal_p (XEXP (x, 0), y))
+      && (rtx_equal_p (XEXP (x, 0), y) || rtx_equal_p (XEXP (x, 1), y)))
     return CC_Cmode;
 
   /* A test for unsigned overflow from an add with carry.  */
   if ((mode_x == DImode || mode_x == TImode)
       && (code == LTU || code == GEU)
       && code_x == PLUS
+      && GET_CODE (XEXP (x, 1)) == ZERO_EXTEND
       && const_dword_umaxp1 (y, mode_x))
     return CC_ADCmode;
 
   /* A test for signed overflow.  */
   if ((mode_x == DImode || mode_x == TImode)
-      && code == NE
-      && code_x == PLUS
-      && GET_CODE (y) == SIGN_EXTEND)
+      && (code == NE || code == EQ)
+      && (code_x == PLUS || code_x == MINUS)
+      && (GET_CODE (XEXP (x, 0)) == SIGN_EXTEND
+          || GET_CODE (XEXP (x, 1)) == SIGN_EXTEND)
+      && GET_CODE (y) == SIGN_EXTEND
+      && GET_CODE (XEXP (y, 0)) == GET_CODE (x))
     return CC_Vmode;
 
   /* For everything else, return CCmode.  */

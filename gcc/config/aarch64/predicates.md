@@ -47,6 +47,15 @@
   return CONST_INT_P (op) && IN_RANGE (INTVAL (op), 1, 3);
 })
 
+;; True for 1 << (GET_MODE_BITSIZE (mode) / 2)
+;; I.e UINT_MAX + 1 for a given mode, in the double-word mode.
+(define_predicate "const_dword_umaxp1"
+  (match_code "const_int,const_wide_int")
+{
+  unsigned bits = GET_MODE_BITSIZE (mode).to_constant () / 2;
+  return rtx_mode_t (op, mode) == (wi::shwi (1, mode) << bits);
+})
+
 (define_predicate "subreg_lowpart_operator"
   (ior (match_code "truncate")
        (and (match_code "subreg")

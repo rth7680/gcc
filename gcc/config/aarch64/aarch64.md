@@ -2703,7 +2703,7 @@
   operands[5] = gen_rtx_LTU (<MODE>mode, ccin, const0_rtx);
   operands[6] = immed_wide_int_const (wi::shwi (1, <DWI>mode)
 				      << GET_MODE_BITSIZE (<MODE>mode),
-				      TImode);
+				      <DWI>mode);
 })
 
 (define_insn "*add<mode>3_carryinC_zero"
@@ -2712,13 +2712,12 @@
 	  (plus:<DWI>
 	    (match_operand:<DWI> 2 "aarch64_carry_operation" "")
 	    (zero_extend:<DWI> (match_operand:GPI 1 "register_operand" "r")))
-	  (match_operand 4 "const_scalar_int_operand" "")))
+	  (match_operand:<DWI> 4 "const_dword_umaxp1" "")))
    (set (match_operand:GPI 0 "register_operand" "=r")
 	(plus:GPI (match_operand:GPI 3 "aarch64_carry_operation" "")
 		  (match_dup 1)))]
-  "rtx_mode_t (operands[4], <DWI>mode)
-   == (wi::shwi (1, <DWI>mode) << (unsigned) GET_MODE_BITSIZE (<MODE>mode))"
-   "adcs\\t%<w>0, %<w>1, <w>zr"
+  ""
+  "adcs\\t%<w>0, %<w>1, <w>zr"
   [(set_attr "type" "adc_reg")]
 )
 
@@ -2730,15 +2729,14 @@
 	      (match_operand:<DWI> 3 "aarch64_carry_operation" "")
 	      (zero_extend:<DWI> (match_operand:GPI 1 "register_operand" "r")))
 	    (zero_extend:<DWI> (match_operand:GPI 2 "register_operand" "r")))
-	  (match_operand 5 "const_scalar_int_operand" "")))
+	  (match_operand:<DWI> 5 "const_dword_umaxp1" "")))
    (set (match_operand:GPI 0 "register_operand" "=r")
 	(plus:GPI
 	  (plus:GPI (match_operand:GPI 4 "aarch64_carry_operation" "")
 		    (match_dup 1))
 	  (match_dup 2)))]
-  "rtx_mode_t (operands[5], <DWI>mode)
-   == (wi::shwi (1, <DWI>mode) << (unsigned) GET_MODE_BITSIZE (<MODE>mode))"
-   "adcs\\t%<w>0, %<w>1, %<w>2"
+  ""
+  "adcs\\t%<w>0, %<w>1, %<w>2"
   [(set_attr "type" "adc_reg")]
 )
 

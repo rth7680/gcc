@@ -9648,10 +9648,7 @@ aarch64_select_cc_mode (RTX_CODE code, rtx x, rtx y)
   if ((mode_x == DImode || mode_x == TImode)
       && (code == LTU || code == GEU)
       && code_x == PLUS
-      && CONST_SCALAR_INT_P (y)
-      && (rtx_mode_t (y, mode_x)
-	  == (wi::shwi (1, mode_x)
-	      << (GET_MODE_BITSIZE (mode_x).to_constant () / 2))))
+      && const_dword_umaxp1 (y, mode_x))
     return CC_ADCmode;
 
   /* A test for signed overflow.  */

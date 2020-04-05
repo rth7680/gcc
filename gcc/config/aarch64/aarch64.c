@@ -9650,7 +9650,7 @@ aarch64_select_cc_mode (RTX_CODE code, rtx x, rtx y)
       && code_x == PLUS
       && GET_CODE (XEXP (x, 1)) == ZERO_EXTEND
       && const_dword_umaxp1 (y, mode_x))
-    return CC_ADCmode;
+    return CC_NOTCmode;
 
   /* A test for signed overflow.  */
   if ((mode_x == DImode || mode_x == TImode)
@@ -9783,7 +9783,7 @@ aarch64_get_condition_code_1 (machine_mode mode, enum rtx_code comp_code)
 	}
       break;
 
-    case E_CC_ADCmode:
+    case E_CC_NOTCmode:
       switch (comp_code)
 	{
 	case GEU: return AARCH64_CS;

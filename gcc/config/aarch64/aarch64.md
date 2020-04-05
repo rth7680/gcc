@@ -2121,7 +2121,7 @@
 			   CODE_FOR_adddi3_compareC,
 			   CODE_FOR_adddi3_compareC,
 			   CODE_FOR_adddi3_carryinC);
-  aarch64_gen_unlikely_cbranch (GEU, CC_ADCmode, operands[3]);
+  aarch64_gen_unlikely_cbranch (GEU, CC_NOTCmode, operands[3]);
   DONE;
 })
 
@@ -2624,7 +2624,7 @@
 (define_expand "add<mode>3_carryinC"
   [(parallel
      [(set (match_dup 3)
-	   (compare:CC_ADC
+	   (compare:CC_NOTC
 	     (plus:<DWI>
 	       (plus:<DWI>
 		 (match_dup 4)
@@ -2639,7 +2639,7 @@
 	     (match_dup 2)))])]
    ""
 {
-  operands[3] = gen_rtx_REG (CC_ADCmode, CC_REGNUM);
+  operands[3] = gen_rtx_REG (CC_NOTCmode, CC_REGNUM);
   rtx ccin = gen_rtx_REG (CC_Cmode, CC_REGNUM);
   operands[4] = gen_rtx_LTU (<DWI>mode, ccin, const0_rtx);
   operands[5] = gen_rtx_LTU (<MODE>mode, ccin, const0_rtx);
@@ -2649,8 +2649,8 @@
 })
 
 (define_insn "*add<mode>3_carryinC_zero"
-  [(set (reg:CC_ADC CC_REGNUM)
-	(compare:CC_ADC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	  (plus:<DWI>
 	    (match_operand:<DWI> 2 "aarch64_carry_operation" "")
 	    (zero_extend:<DWI> (match_operand:GPI 1 "register_operand" "r")))
@@ -2664,8 +2664,8 @@
 )
 
 (define_insn "*add<mode>3_carryinC"
-  [(set (reg:CC_ADC CC_REGNUM)
-	(compare:CC_ADC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	  (plus:<DWI>
 	    (plus:<DWI>
 	      (match_operand:<DWI> 3 "aarch64_carry_operation" "")

@@ -9652,6 +9652,15 @@ aarch64_select_cc_mode (RTX_CODE code, rtx x, rtx y)
       && const_dword_umaxp1 (y, mode_x))
     return CC_NOTCmode;
 
+  /* A test for unsigned overflow from a subtract with borrow.  */
+  if ((mode_x == DImode || mode_x == TImode)
+      && (code == GEU || code == LTU)
+      && code_x == ZERO_EXTEND
+      && ((GET_CODE (y) == PLUS
+	   && aarch64_borrow_operation (XEXP (y, 0), mode_x))
+	  || aarch64_borrow_operation (y, mode_x)))
+    return CC_NOTCmode;
+
   /* A test for signed overflow.  */
   if ((mode_x == DImode || mode_x == TImode)
       && (code == NE || code == EQ)

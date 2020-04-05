@@ -2998,7 +2998,7 @@
 			   CODE_FOR_subdi3_compare1,
 			   CODE_FOR_subdi3_compare1,
 			   CODE_FOR_usubdi3_carryinC);
-  aarch64_gen_unlikely_cbranch (LTU, CCmode, operands[3]);
+  aarch64_gen_unlikely_cbranch (LTU, CC_NOTCmode, operands[3]);
   DONE;
 })
 
@@ -3411,8 +3411,8 @@
 
 (define_expand "usub<GPI:mode>3_carryinC"
   [(parallel
-     [(set (reg:CC CC_REGNUM)
-	   (compare:CC
+     [(set (reg:CC_NOTC CC_REGNUM)
+	   (compare:CC_NOTC
 	     (zero_extend:<DWI>
 	       (match_operand:GPI 1 "aarch64_reg_or_zero"))
 	     (plus:<DWI>
@@ -3427,8 +3427,8 @@
 )
 
 (define_insn "*usub<GPI:mode>3_carryinC_z1"
-  [(set (reg:CC CC_REGNUM)
-	(compare:CC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	  (const_int 0)
 	  (plus:<DWI>
 	    (zero_extend:<DWI>
@@ -3444,8 +3444,8 @@
 )
 
 (define_insn "*usub<GPI:mode>3_carryinC_z2"
-  [(set (reg:CC CC_REGNUM)
-	(compare:CC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	  (zero_extend:<DWI>
 	    (match_operand:GPI 1 "register_operand" "r"))
 	  (match_operand:<DWI> 2 "aarch64_borrow_operation" "")))
@@ -3459,8 +3459,8 @@
 )
 
 (define_insn "*usub<GPI:mode>3_carryinC"
-  [(set (reg:CC CC_REGNUM)
-	(compare:CC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	  (zero_extend:<DWI>
 	    (match_operand:GPI 1 "register_operand" "r"))
 	  (plus:<DWI>

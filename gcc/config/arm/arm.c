@@ -15883,7 +15883,7 @@ arm_select_cc_mode (enum rtx_code op, rtx x, rtx y)
       && CONST_INT_P (y)
       && UINTVAL (y) == 0x800000000
       && (op == GEU || op == LTU))
-    return CC_ADCmode;
+    return CC_NOTCmode;
 
   if (GET_MODE (x) == DImode
       && (op == GE || op == LT)
@@ -15899,7 +15899,7 @@ arm_select_cc_mode (enum rtx_code op, rtx x, rtx y)
       && ((GET_CODE (y) == PLUS
 	   && arm_borrow_operation (XEXP (y, 0), DImode))
 	  || arm_borrow_operation (y, DImode)))
-    return CC_Bmode;
+    return CC_NOTCmode;
 
   if (GET_MODE (x) == DImode
       && (op == EQ || op == NE)
@@ -16093,18 +16093,18 @@ arm_gen_dicompare_reg (rtx_code code, rtx x, rtx y, rtx scratch)
 
 	rtx_insn *insn;
 	if (y_hi == const0_rtx)
-	  insn = emit_insn (gen_cmpsi3_0_carryin_CC_Bout (scratch, x_hi,
-							  cmp1));
+	  insn = emit_insn (gen_cmpsi3_0_carryin_CC_NOTCout
+			    (scratch, x_hi, cmp1));
 	else if (CONST_INT_P (y_hi))
 	  {
 	    /* Constant is viewed as unsigned when zero-extended.  */
 	    y_hi = GEN_INT (UINTVAL (y_hi) & 0xffffffffULL);
-	    insn = emit_insn (gen_cmpsi3_imm_carryin_CC_Bout (scratch, x_hi,
-							      y_hi, cmp1));
+	    insn = emit_insn (gen_cmpsi3_imm_carryin_CC_NOTCout
+			      (scratch, x_hi, y_hi, cmp1));
 	  }
 	else
-	  insn = emit_insn (gen_cmpsi3_carryin_CC_Bout (scratch, x_hi, y_hi,
-							cmp1));
+	  insn = emit_insn (gen_cmpsi3_carryin_CC_NOTCout
+			    (scratch, x_hi, y_hi, cmp1));
 	return SET_DEST (single_set (insn));
       }
 
@@ -16125,8 +16125,8 @@ arm_gen_dicompare_reg (rtx_code code, rtx x, rtx y, rtx scratch)
 			 arm_gen_compare_reg (LTU, y_lo, x_lo, scratch),
 			 const0_rtx);
 	y_hi = GEN_INT (0xffffffff & UINTVAL (y_hi));
-	rtx_insn *insn = emit_insn (gen_rscsi3_CC_Bout_scratch (scratch, y_hi,
-								x_hi, cmp1));
+	rtx_insn *insn = emit_insn (gen_rscsi3_CC_NOTCout_scratch
+				    (scratch, y_hi, x_hi, cmp1));
 	return SET_DEST (single_set (insn));
       }
 
@@ -24723,7 +24723,7 @@ maybe_get_arm_condition_code (rtx comparison)
 	default: return ARM_NV;
 	}
 
-    case E_CC_Bmode:
+    case E_CC_NOTCmode:
       switch (comp_code)
 	{
 	case GEU: return ARM_CS;
@@ -24736,14 +24736,6 @@ maybe_get_arm_condition_code (rtx comparison)
 	{
 	case NE: return ARM_VS;
 	case EQ: return ARM_VC;
-	default: return ARM_NV;
-	}
-
-    case E_CC_ADCmode:
-      switch (comp_code)
-	{
-	case GEU: return ARM_CS;
-	case LTU: return ARM_CC;
 	default: return ARM_NV;
 	}
 

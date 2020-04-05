@@ -907,7 +907,7 @@
 
 ;; Determine the mode of a 'wide compare', ie where the carry flag is
 ;; propagated into the comparison.
-(define_code_attr CC_EXTEND [(sign_extend "CC_NV") (zero_extend "CC_B")])
+(define_code_attr CC_EXTEND [(sign_extend "CC_NV") (zero_extend "CC_NOTC")])
 
 ;; Assembler mnemonics for vqh_ops and vqhs_ops iterators.
 (define_code_attr VQH_mnem [(plus "vadd") (smin "vmin") (smax "vmax")

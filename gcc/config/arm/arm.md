@@ -755,7 +755,7 @@
       else
         emit_insn (gen_addsi3_cin_cout_reg (hi_result, hi_op1, hi_op2));
 
-      arm_gen_unlikely_cbranch (GEU, CC_ADCmode, operands[3]);
+      arm_gen_unlikely_cbranch (GEU, CC_NOTCmode, operands[3]);
     }
 
   DONE;
@@ -764,7 +764,7 @@
 (define_expand "addsi3_cin_cout_reg"
   [(parallel
     [(set (match_dup 3)
-	  (compare:CC_ADC
+	  (compare:CC_NOTC
 	   (plus:DI
 	    (plus:DI (match_dup 4)
 		     (zero_extend:DI (match_operand:SI 1 "s_register_operand")))
@@ -775,7 +775,7 @@
 		   (match_dup 2)))])]
   "TARGET_32BIT"
   {
-    operands[3] = gen_rtx_REG (CC_ADCmode, CC_REGNUM);
+    operands[3] = gen_rtx_REG (CC_NOTCmode, CC_REGNUM);
     rtx ccin = gen_rtx_REG (CC_Cmode, CC_REGNUM);
     operands[4] = gen_rtx_LTU (DImode, ccin, const0_rtx);
     operands[5] = gen_rtx_LTU (SImode, ccin, const0_rtx);
@@ -783,8 +783,8 @@
 )
 
 (define_insn "*addsi3_cin_cout_reg_insn"
-  [(set (reg:CC_ADC CC_REGNUM)
-	(compare:CC_ADC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	 (plus:DI
 	  (plus:DI
 	   (match_operand:DI 3 "arm_carry_operation" "")
@@ -807,7 +807,7 @@
 (define_expand "addsi3_cin_cout_imm"
   [(parallel
     [(set (match_dup 3)
-	  (compare:CC_ADC
+	  (compare:CC_NOTC
 	   (plus:DI
 	    (plus:DI (match_dup 4)
 		     (zero_extend:DI (match_operand:SI 1 "s_register_operand")))
@@ -818,7 +818,7 @@
 		   (match_operand:SI 2 "arm_adcimm_operand")))])]
   "TARGET_32BIT"
   {
-    operands[3] = gen_rtx_REG (CC_ADCmode, CC_REGNUM);
+    operands[3] = gen_rtx_REG (CC_NOTCmode, CC_REGNUM);
     rtx ccin = gen_rtx_REG (CC_Cmode, CC_REGNUM);
     operands[4] = gen_rtx_LTU (DImode, ccin, const0_rtx);
     operands[5] = gen_rtx_LTU (SImode, ccin, const0_rtx);
@@ -827,8 +827,8 @@
 )
 
 (define_insn "*addsi3_cin_cout_imm_insn"
-  [(set (reg:CC_ADC CC_REGNUM)
-	(compare:CC_ADC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	 (plus:DI
 	  (plus:DI
 	   (match_operand:DI 3 "arm_carry_operation" "")
@@ -850,7 +850,7 @@
 (define_expand "addsi3_cin_cout_0"
   [(parallel
     [(set (match_dup 2)
-	  (compare:CC_ADC
+	  (compare:CC_NOTC
 	   (plus:DI (match_dup 3)
 		    (zero_extend:DI (match_operand:SI 1 "s_register_operand")))
 	   (const_int 4294967296)))
@@ -858,7 +858,7 @@
 	  (plus:SI (match_dup 4) (match_dup 1)))])]
   "TARGET_32BIT"
   {
-    operands[2] = gen_rtx_REG (CC_ADCmode, CC_REGNUM);
+    operands[2] = gen_rtx_REG (CC_NOTCmode, CC_REGNUM);
     rtx ccin = gen_rtx_REG (CC_Cmode, CC_REGNUM);
     operands[3] = gen_rtx_LTU (DImode, ccin, const0_rtx);
     operands[4] = gen_rtx_LTU (SImode, ccin, const0_rtx);
@@ -866,8 +866,8 @@
 )
 
 (define_insn "*addsi3_cin_cout_0_insn"
-  [(set (reg:CC_ADC CC_REGNUM)
-	(compare:CC_ADC
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	 (plus:DI
 	  (match_operand:DI 2 "arm_carry_operation" "")
 	  (zero_extend:DI (match_operand:SI 1 "s_register_operand" "r")))
@@ -1616,7 +1616,7 @@
     emit_insn (gen_usubvsi3_borrow (hi_result, hi_op1, hi_op2,
 				    gen_rtx_LTU (SImode, ccreg, const0_rtx),
 				    gen_rtx_LTU (DImode, ccreg, const0_rtx)));
-  arm_gen_unlikely_cbranch (LTU, CC_Bmode, operands[3]);
+  arm_gen_unlikely_cbranch (LTU, CC_NOTCmode, operands[3]);
 
   DONE;
 })
@@ -2109,8 +2109,8 @@
 )
 
 (define_insn "usubvsi3_borrow"
-  [(set (reg:CC_B CC_REGNUM)
-	(compare:CC_B
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	 (zero_extend:DI (match_operand:SI 1 "s_register_operand" "0,r"))
 	 (plus:DI (match_operand:DI 4 "arm_borrow_operation" "")
 	          (zero_extend:DI
@@ -2127,8 +2127,8 @@
 )
 
 (define_insn "usubvsi3_borrow_imm"
-  [(set (reg:CC_B CC_REGNUM)
-	(compare:CC_B
+  [(set (reg:CC_NOTC CC_REGNUM)
+	(compare:CC_NOTC
 	 (zero_extend:DI (match_operand:SI 1 "s_register_operand" "r,r"))
 	 (plus:DI (match_operand:DI 5 "arm_borrow_operation" "")
 		  (match_operand:DI 3 "const_int_operand" "n,n"))))

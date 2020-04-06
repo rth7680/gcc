@@ -56,6 +56,15 @@
   return rtx_mode_t (op, mode) == (wi::shwi (1, mode) << bits);
 })
 
+;; True for (1 << (GET_MODE_BITSIZE (mode) / 2)) - 1
+;; I.e UINT_MAX for a given mode, in the double-word mode.
+(define_predicate "const_dword_umax"
+  (match_code "const_int,const_wide_int")
+{
+  unsigned bits = GET_MODE_BITSIZE (mode).to_constant () / 2;
+  return rtx_mode_t (op, mode) == wi::sub(wi::shwi (1, mode) << bits, 1);
+})
+
 (define_predicate "subreg_lowpart_operator"
   (ior (match_code "truncate")
        (and (match_code "subreg")

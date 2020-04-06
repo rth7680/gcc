@@ -1907,6 +1907,9 @@
 (define_code_attr fix_trunc_optab [(fix "fix_trunc")
 				   (unsigned_fix "fixuns_trunc")])
 
+;; For double-word comparisons
+(define_code_attr CC_EXTEND [(sign_extend "CC_NV") (zero_extend "CC_NOTC")])
+
 ;; Optab prefix for sign/zero-extending operations
 (define_code_attr su_optab [(sign_extend "") (zero_extend "u")
 			    (div "") (udiv "u")

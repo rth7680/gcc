@@ -41,6 +41,7 @@ CC_MODE (CC_C);     /* C represents unsigned overflow of a simple addition.  */
 CC_MODE (CC_NOTC);  /* !C represents unsigned overflow of subtraction,
                        as well as our representation of add-with-carry.  */
 CC_MODE (CC_V);     /* Only V bit of condition flags is valid.  */
+CC_MODE (CC_NV);    /* N and V bits set for signed GE/LT comparison.  */
 
 /* Half-precision floating point for __fp16.  */
 FLOAT_MODE (HF, 2, 0);

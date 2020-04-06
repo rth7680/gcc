@@ -491,6 +491,20 @@
   operands[2] = const0_rtx;
 })
 
+(define_expand "cbranchti4"
+  [(set (pc) (if_then_else (match_operator 0 "aarch64_comparison_operator"
+			    [(match_operand:TI 1 "register_operand")
+			     (match_operand:TI 2 "aarch64_reg_or_imm")])
+			   (label_ref (match_operand 3 "" ""))
+			   (pc)))]
+  ""
+{
+  operands[0] = aarch64_gen_compare_reg (GET_CODE (operands[0]), operands[1],
+					 operands[2]);
+  operands[1] = XEXP (operands[0], 0);
+  operands[2] = const0_rtx;
+})
+
 (define_expand "cbranch<mode>4"
   [(set (pc) (if_then_else (match_operator 0 "aarch64_comparison_operator"
 			    [(match_operand:GPF 1 "register_operand")
@@ -587,6 +601,25 @@
   "TARGET_FLOAT"
   "fccmp<e>\\t%<s>2, %<s>3, %k5, %M4"
   [(set_attr "type" "fccmp<s>")]
+)
+
+;; This specialization has the advantage of being able to swap operands.
+;; Use CC_NZ because SELECT_CC_MODE uses that for comparisons against 0.
+(define_insn "ccmp_iorne<mode>"
+  [(set (reg:CC_NZ CC_REGNUM)
+	(compare:CC_NZ
+	  (ior:SI
+	    (ne:SI (reg:CC CC_REGNUM)
+		   (const_int 0))
+	    (ne:SI (match_operand:GPI 0 "register_operand" "%r,r,r")
+		   (match_operand:GPI 1 "aarch64_ccmp_operand" "r,Uss,Usn")))
+	  (const_int 0)))]
+  ""
+  "@
+   ccmp\\t%<w>0, %<w>1, 0, eq
+   ccmp\\t%<w>0, %1, 0, eq
+   ccmn\\t%<w>0, #%n1, 0, eq"
+  [(set_attr "type" "alus_sreg,alus_imm,alus_imm")]
 )
 
 ;; Expansion of signed mod by a power of 2 using CSNEG.
@@ -3408,6 +3441,72 @@
   [(set_attr "type" "adc_reg")]
 )
 
+(define_expand "<su_optab>cmp<mode>_carryin"
+  [(set (reg:<CC_EXTEND> CC_REGNUM)
+	(compare:<CC_EXTEND>
+	  (ANY_EXTEND:<DWI> (match_operand:GPI 0 "register_operand"))
+	  (plus:<DWI>
+	    (geu:<DWI> (reg:CC_C CC_REGNUM) (const_int 0))
+	    (ANY_EXTEND:<DWI> (match_operand:GPI 1 "register_operand")))))]
+  ""
+)
+
+(define_insn "*<su_optab>cmp<mode>_carryin"
+  [(set (reg:<CC_EXTEND> CC_REGNUM)
+	(compare:<CC_EXTEND>
+	  (ANY_EXTEND:<DWI> (match_operand:GPI 0 "register_operand" "r"))
+	  (plus:<DWI>
+	    (match_operand:<DWI> 2 "aarch64_borrow_operation" "")
+	    (ANY_EXTEND:<DWI> (match_operand:GPI 1 "register_operand" "r")))))]
+  ""
+  "sbcs\\t<w>zr, %<w>0, %<w>1"
+  [(set_attr "type" "adc_reg")]
+)
+
+(define_insn "*<su_optab>cmp<mode>_carryin_z1"
+  [(set (reg:<CC_EXTEND> CC_REGNUM)
+	(compare:<CC_EXTEND>
+	  (const_int 0)
+	  (plus:<DWI>
+	    (match_operand:<DWI> 1 "aarch64_borrow_operation" "")
+	    (ANY_EXTEND:<DWI> (match_operand:GPI 0 "register_operand" "r")))))]
+  ""
+  "sbcs\\t<w>zr, <w>zr, %<w>0"
+  [(set_attr "type" "adc_reg")]
+)
+
+(define_insn "*<su_optab>cmp<mode>_carryin_z2"
+  [(set (reg:<CC_EXTEND> CC_REGNUM)
+	(compare:<CC_EXTEND>
+	  (ANY_EXTEND:<DWI> (match_operand:GPI 0 "register_operand" "r"))
+	  (match_operand:<DWI> 1 "aarch64_borrow_operation" "")))]
+  ""
+  "sbcs\\t<w>zr, %<w>0, <w>zr"
+  [(set_attr "type" "adc_reg")]
+)
+
+(define_insn "*cmp<mode>_carryin_m2"
+  [(set (reg:<CC_EXTEND> CC_REGNUM)
+	(compare:<CC_EXTEND>
+	  (ANY_EXTEND:<DWI> (match_operand:GPI 0 "register_operand" "r"))
+	  (neg:<DWI> (match_operand:<DWI> 1 "aarch64_carry_operation" ""))))]
+  ""
+  "adcs\\t<w>zr, %<w>0, <w>zr"
+  [(set_attr "type" "adc_reg")]
+)
+
+(define_insn "*ucmp<mode>_carryin_m2"
+  [(set (reg:<CC_EXTEND> CC_REGNUM)
+	(compare:<CC_EXTEND>
+	  (ANY_EXTEND:<DWI> (match_operand:GPI 0 "register_operand" "r"))
+	  (plus:<DWI>
+	    (match_operand:<DWI> 1 "aarch64_borrow_operation" "")
+	    (match_operand:<DWI> 2 "const_dword_umax" ""))))]
+  ""
+  "adcs\\t<w>zr, %<w>0, <w>zr"
+  [(set_attr "type" "adc_reg")]
+)
+
 (define_expand "usub<GPI:mode>3_carryinC"
   [(parallel
      [(set (reg:CC_NOTC CC_REGNUM)
@@ -4020,6 +4119,20 @@
 	(match_operator:SI 1 "aarch64_comparison_operator"
 	 [(match_operand:GPI 2 "register_operand")
 	  (match_operand:GPI 3 "aarch64_plus_operand")]))]
+  ""
+{
+  operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],
+				         operands[3]);
+  PUT_MODE (operands[1], SImode);
+  operands[2] = XEXP (operands[1], 0);
+  operands[3] = const0_rtx;
+})
+
+(define_expand "cstoreti4"
+  [(set (match_operand:SI 0 "register_operand")
+	(match_operator:SI 1 "aarch64_comparison_operator"
+	 [(match_operand:TI 2 "register_operand")
+	  (match_operand:TI 3 "aarch64_reg_or_imm")]))]
   ""
 {
   operands[1] = aarch64_gen_compare_reg (GET_CODE (operands[1]), operands[2],

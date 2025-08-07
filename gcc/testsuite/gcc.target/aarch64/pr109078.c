@@ -8,7 +8,7 @@
 /*
 ** simple_gemm:
 **	...
-**	tbnz	[^\n]+
+**	[tc]bnz	[^\n]+
 **	ld1	[^\n]+
 **	fadd	[^\n]+
 **	fadd	[^\n]+
